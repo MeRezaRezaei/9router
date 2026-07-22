@@ -144,6 +144,12 @@ export function createSSEStream(options = {}) {
                 }
               }
 
+              // Rewrite model in chunk to match client-requested model
+              if (parsed.model && model) {
+                parsed.model = model;
+                fieldsInjected = true;
+              }
+
               if (!hasValuableContent(parsed, FORMATS.OPENAI)) {
                 continue;
               }
@@ -308,6 +314,9 @@ export function createSSEStream(options = {}) {
         if (translated?.length > 0) {
           for (const item of translated) {
             if (item === null || item === undefined) continue;
+            if (item.model && model) {
+              item.model = model;
+            }
             // Filter empty chunks
             if (!hasValuableContent(item, sourceFormat)) {
               continue; // Skip this empty chunk
