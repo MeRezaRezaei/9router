@@ -38,6 +38,30 @@ async function resolveMitmRouterBaseUrl() {
   }
 }
 
+/**
+ * Returns the SOCKS5_PROXY env-var value to pass to the MITM server process,
+ * or an empty string if the feature is disabled or not configured.
+ *
+ * Validates the URL before passing it to prevent the server process from
+ * crashing on startup with an invalid proxy address.
+ */
+async function resolveMitmSocksProxy() {
+  if (!_getSettings) return "";
+  try {
+    const s = await _getSettings();
+    if (!s || !s.mitmSocksProxyEnabled) return "";
+    const raw = (s.mitmSocksProxyUrl || "").trim();
+    if (!raw) return "";
+    // Validate: must be a valid socks5h:// or socks5:// URL with a hostname
+    const u = new URL(raw);
+    if (u.protocol !== "socks5h:" && u.protocol !== "socks5:") return "";
+    if (!u.hostname) return "";
+    return raw;
+  } catch {
+    return "";
+  }
+}
+
 const MITM_PORT = 443;
 const MITM_WIN_NODE_PORT = 8443;
 const PID_FILE = path.join(MITM_DIR, ".mitm.pid");
@@ -582,7 +606,8 @@ async function startServer(apiKey, sudoPassword, forceKillPort443 = false) {
     }
   }
   const mitmRouterBase = await resolveMitmRouterBaseUrl();
-  log(`🚀 Starting server... (router: ${mitmRouterBase})`);
+  const socksProxy = await resolveMitmSocksProxy();
+  log(`🚀 Starting server... (router: ${mitmRouterBase}${socksProxy ? `, socks: ${socksProxy}` : ""})`);
   if (IS_WIN) {
     // Check port 443 — ask user before killing
     const winOwner = await getPort443Owner(sudoPassword);
@@ -613,6 +638,7 @@ async function startServer(apiKey, sudoPassword, forceKillPort443 = false) {
           ROUTER_API_KEY: apiKey,
           NODE_ENV: "production",
           MITM_ROUTER_BASE: mitmRouterBase,
+          ...(socksProxy && { SOCKS5_PROXY: socksProxy }),
         },
       }
     );
@@ -625,6 +651,7 @@ async function startServer(apiKey, sudoPassword, forceKillPort443 = false) {
       `HOME=${shellQuoteSingle(os.homedir())}`,
       `ROUTER_API_KEY=${shellQuoteSingle(apiKey)}`,
       `MITM_ROUTER_BASE=${shellQuoteSingle(mitmRouterBase)}`,
+      ...(socksProxy ? [`SOCKS5_PROXY=${shellQuoteSingle(socksProxy)}`] : []),
       "NODE_ENV=production",
       shellQuoteSingle(process.execPath),
       shellQuoteSingle(effectiveServerPath),
@@ -647,6 +674,7 @@ async function startServer(apiKey, sudoPassword, forceKillPort443 = false) {
         ROUTER_API_KEY: apiKey,
         NODE_ENV: "production",
         MITM_ROUTER_BASE: mitmRouterBase,
+        ...(socksProxy && { SOCKS5_PROXY: socksProxy }),
       },
     });
   }

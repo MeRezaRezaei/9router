@@ -33,6 +33,14 @@ const DEFAULT_SETTINGS = {
   outboundProxyUrl: "",
   outboundNoProxy: "",
   mitmRouterBaseUrl: DEFAULT_MITM_ROUTER_BASE,
+  // SOCKS5/SOCKS5h upstream proxy for MITM outbound connections.
+  // When enabled, all upstream TLS connections from the MITM server (ALPN
+  // probe, HTTP/2, HTTP/1.1 passthrough) tunnel through this proxy.
+  // socks5h:// = proxy resolves DNS (recommended — prevents DNS leaks).
+  // socks5://  = local DNS resolution, proxy tunnels TCP only.
+  // Kill switch: disable this without stopping the MITM server entirely.
+  mitmSocksProxyEnabled: false,
+  mitmSocksProxyUrl: "",
   dnsToolEnabled: {},
   rtkEnabled: true,
   headroomEnabled: false,
