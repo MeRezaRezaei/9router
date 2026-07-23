@@ -310,7 +310,7 @@ export async function handleChatCore({ body, modelInfo, credentials, log, onCred
   }
 
   const requestedModel = clientRawRequest?.body?.model || model;
-  const sharedCtx = { provider, model: requestedModel, body, stream, translatedBody, finalBody, requestStartTime, connectionId, apiKey, clientRawRequest, onRequestSuccess };
+  const sharedCtx = { provider, model, requestedModel, body, stream, translatedBody, finalBody, requestStartTime, connectionId, apiKey, clientRawRequest, onRequestSuccess };
   const appendLog = (extra) => appendRequestLog({ model, provider, connectionId, ...extra }).catch(() => { });
   const trackDone = () => trackPendingRequest(model, provider, connectionId, false);
 

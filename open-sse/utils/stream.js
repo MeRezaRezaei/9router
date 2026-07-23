@@ -38,17 +38,18 @@ const STREAM_MODE = {
  */
 export function createSSEStream(options = {}) {
   const {
-    mode = STREAM_MODE.TRANSLATE,
+    mode,
     targetFormat,
     sourceFormat,
     provider = null,
     reqLogger = null,
     toolNameMap = null,
     model = null,
+    requestedModel = null,
     connectionId = null,
     body = null,
     onStreamComplete = null,
-    apiKey = null
+    apiKey = null,
   } = options;
 
   let buffer = "";
@@ -145,8 +146,8 @@ export function createSSEStream(options = {}) {
               }
 
               // Rewrite model in chunk to match client-requested model
-              if (parsed.model && model) {
-                parsed.model = model;
+              if (parsed.model && requestedModel) {
+                parsed.model = requestedModel;
                 fieldsInjected = true;
               }
 
@@ -314,8 +315,8 @@ export function createSSEStream(options = {}) {
         if (translated?.length > 0) {
           for (const item of translated) {
             if (item === null || item === undefined) continue;
-            if (item.model && model) {
-              item.model = model;
+            if (item.model && requestedModel) {
+              item.model = requestedModel;
             }
             // Filter empty chunks
             if (!hasValuableContent(item, sourceFormat)) {
@@ -473,7 +474,7 @@ export function createSSEStream(options = {}) {
   });
 }
 
-export function createSSETransformStreamWithLogger(targetFormat, sourceFormat, provider = null, reqLogger = null, toolNameMap = null, model = null, connectionId = null, body = null, onStreamComplete = null, apiKey = null) {
+export function createSSETransformStreamWithLogger(targetFormat, sourceFormat, provider = null, reqLogger = null, toolNameMap = null, model = null, connectionId = null, body = null, onStreamComplete = null, apiKey = null, requestedModel = null) {
   return createSSEStream({
     mode: STREAM_MODE.TRANSLATE,
     targetFormat,
@@ -482,6 +483,7 @@ export function createSSETransformStreamWithLogger(targetFormat, sourceFormat, p
     reqLogger,
     toolNameMap,
     model,
+    requestedModel,
     connectionId,
     body,
     onStreamComplete,
@@ -489,12 +491,13 @@ export function createSSETransformStreamWithLogger(targetFormat, sourceFormat, p
   });
 }
 
-export function createPassthroughStreamWithLogger(provider = null, reqLogger = null, model = null, connectionId = null, body = null, onStreamComplete = null, apiKey = null) {
+export function createPassthroughStreamWithLogger(provider = null, reqLogger = null, model = null, connectionId = null, body = null, onStreamComplete = null, apiKey = null, requestedModel = null) {
   return createSSEStream({
     mode: STREAM_MODE.PASSTHROUGH,
     provider,
     reqLogger,
     model,
+    requestedModel,
     connectionId,
     body,
     onStreamComplete,
