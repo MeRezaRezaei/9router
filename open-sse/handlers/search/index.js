@@ -10,6 +10,7 @@
 import { buildSearchRequest } from "./callers.js";
 import { normalizeSearchResponse } from "./normalizers.js";
 import { handleChatSearch } from "./chatSearch.js";
+import { proxyAwareFetch } from "../../utils/proxyFetch.js";
 
 const GLOBAL_TIMEOUT_MS = 15000;
 const NON_RETRIABLE = new Set([400, 401, 403, 404]);
@@ -61,7 +62,7 @@ function successResult(data) {
  * Run a single dedicated search provider attempt.
  * @returns {Promise<{success:boolean, status?:number, error?:string, data?:object}>}
  */
-async function tryDedicatedProvider({ provider, providerConfig, body, credentials, log, globalStartTime }) {
+async function tryDedicatedProvider({ provider, providerConfig, body, credentials, log, globalStartTime, proxyOptions }) {
   const startTime = Date.now();
   const token = credentials?.apiKey || credentials?.accessToken || undefined;
 
@@ -97,10 +98,10 @@ async function tryDedicatedProvider({ provider, providerConfig, body, credential
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeout);
 
-  log?.info?.("SEARCH", `${provider.id} | "${params.query.slice(0, 80)}" | type=${params.searchType}`);
+   log?.info?.("SEARCH", `${provider.id} | "${params.query.slice(0, 80)}" | type=${params.searchType}`);
 
   try {
-    const resp = await fetch(url, { ...init, headers: sanitizeHeaders(init.headers), signal: controller.signal });
+    const resp = await proxyAwareFetch(url, { ...init, headers: sanitizeHeaders(init.headers), signal: controller.signal }, proxyOptions);
     clearTimeout(timer);
     if (!resp.ok) {
       const errText = await resp.text().catch(() => "");
@@ -142,9 +143,10 @@ async function tryDedicatedProvider({ provider, providerConfig, body, credential
  * @param {object}   options.provider        Provider entry from AI_PROVIDERS
  * @param {object}   [options.providerConfig] Provider's searchConfig (if dedicated)
  * @param {object|null} options.credentials  Provider credentials
+ * @param {object|null} [options.proxyOptions] Proxy options
  * @param {object}   [options.log]           Logger
  */
-export async function handleSearchCore({ body, provider, providerConfig, credentials, log }) {
+export async function handleSearchCore({ body, provider, providerConfig, credentials, log, proxyOptions }) {
   const globalStartTime = Date.now();
 
   // 1. Sanitize query
@@ -161,7 +163,8 @@ export async function handleSearchCore({ body, provider, providerConfig, credent
       body: normalizedBody,
       credentials,
       log,
-      globalStartTime
+      globalStartTime,
+      proxyOptions
     });
   } else if (provider.searchViaChat) {
     result = await handleChatSearch({

@@ -107,10 +107,18 @@ export async function handleEmbeddings(request) {
 
     const refreshedCredentials = await checkAndRefreshToken(provider, credentials);
 
+    const proxyOptions = {
+      connectionProxyEnabled: refreshedCredentials?.providerSpecificData?.connectionProxyEnabled === true,
+      connectionProxyUrl: refreshedCredentials?.providerSpecificData?.connectionProxyUrl || "",
+      connectionNoProxy: refreshedCredentials?.providerSpecificData?.connectionNoProxy || "",
+      vercelRelayUrl: refreshedCredentials?.providerSpecificData?.vercelRelayUrl || "",
+    };
+
     const result = await handleEmbeddingsCore({
       body: { ...body, model: `${provider}/${model}` },
       modelInfo: { provider, model },
       credentials: refreshedCredentials,
+      proxyOptions,
       log,
       onCredentialsRefreshed: async (newCreds) => {
         await updateProviderCredentials(credentials.connectionId, {

@@ -1,6 +1,7 @@
 // Gemini TTS — generateContent with AUDIO modality returns PCM L16, wrap as WAV
 import { Buffer } from "node:buffer";
 import { PROVIDER_MEDIA, PROVIDER_MODELS } from "../../providers/index.js";
+import { proxyAwareFetch } from "../../utils/proxyFetch.js";
 
 const TTS_CFG = PROVIDER_MEDIA["gemini"]?.ttsConfig || {};
 const TTS_BASE = TTS_CFG.baseUrl;
@@ -59,11 +60,11 @@ function buildPrompt(text, language) {
 }
 
 export default {
-  async synthesize(text, model, credentials, _responseFormat, opts = {}) {
+  async synthesize(text, model, credentials, _responseFormat, { language, proxyOptions }) {
     if (!credentials?.apiKey) throw new Error("No Gemini API key configured");
     const { modelId, voiceId } = parseGeminiModelVoice(model);
     const url = `${TTS_BASE}/${modelId}:generateContent?key=${credentials.apiKey}`;
-    const res = await fetch(url, {
+    const res = await proxyAwareFetch(url, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -73,7 +74,7 @@ export default {
           speechConfig: { voiceConfig: { prebuiltVoiceConfig: { voiceName: voiceId } } },
         },
       }),
-    });
+    }, proxyOptions);
     if (!res.ok) {
       const err = await res.json().catch(() => ({}));
       throw new Error(err?.error?.message || `Gemini TTS failed: ${res.status}`);

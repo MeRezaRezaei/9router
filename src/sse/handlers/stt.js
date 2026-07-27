@@ -47,7 +47,7 @@ export async function handleStt(request) {
 
   // noAuth providers
   if (!CREDENTIALED_PROVIDERS.has(provider)) {
-    const result = await handleSttCore({ provider, model, formData, sttConfig: AI_PROVIDERS[provider]?.sttConfig });
+    const result = await handleSttCore({ provider, model, formData, sttConfig: AI_PROVIDERS[provider]?.sttConfig, proxyOptions: null });
     if (result.success) return result.response;
     return errorResponse(result.status || HTTP_STATUS.BAD_GATEWAY, result.error || "STT failed");
   }
@@ -70,9 +70,15 @@ export async function handleStt(request) {
       return errorResponse(lastStatus || HTTP_STATUS.SERVICE_UNAVAILABLE, lastError || "All accounts unavailable");
     }
 
+    const proxyOptions = {
+      connectionProxyEnabled: credentials?.providerSpecificData?.connectionProxyEnabled === true,
+      connectionProxyUrl: credentials?.providerSpecificData?.connectionProxyUrl || "",
+      connectionNoProxy: credentials?.providerSpecificData?.connectionNoProxy || "",
+      vercelRelayUrl: credentials?.providerSpecificData?.vercelRelayUrl || "",
+    };
     log.info("AUTH", `\x1b[32mUsing ${provider} account: ${credentials.connectionName}\x1b[0m`);
 
-    const result = await handleSttCore({ provider, model, formData, credentials, sttConfig: AI_PROVIDERS[provider]?.sttConfig });
+    const result = await handleSttCore({ provider, model, formData, credentials, sttConfig: AI_PROVIDERS[provider]?.sttConfig, proxyOptions });
 
     if (result.success) return result.response;
 
