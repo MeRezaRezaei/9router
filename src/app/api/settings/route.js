@@ -82,7 +82,8 @@ export async function PATCH(request) {
     if (
       Object.prototype.hasOwnProperty.call(body, "outboundProxyEnabled") ||
       Object.prototype.hasOwnProperty.call(body, "outboundProxyUrl") ||
-      Object.prototype.hasOwnProperty.call(body, "outboundNoProxy")
+      Object.prototype.hasOwnProperty.call(body, "outboundNoProxy") ||
+      Object.prototype.hasOwnProperty.call(body, "outboundProxyKillSwitch")
     ) {
       applyOutboundProxyEnv(settings);
     }

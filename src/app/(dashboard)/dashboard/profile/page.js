@@ -53,6 +53,7 @@ export default function ProfilePage() {
     outboundProxyEnabled: false,
     outboundProxyUrl: "",
     outboundNoProxy: "",
+    outboundProxyKillSwitch: false,
   });
   const [proxyStatus, setProxyStatus] = useState({ type: "", message: "" });
   const [proxyLoading, setProxyLoading] = useState(false);
@@ -80,6 +81,7 @@ export default function ProfilePage() {
           outboundProxyEnabled: data?.outboundProxyEnabled === true,
           outboundProxyUrl: data?.outboundProxyUrl || "",
           outboundNoProxy: data?.outboundNoProxy || "",
+          outboundProxyKillSwitch: data?.outboundProxyKillSwitch === true,
         });
         setLoading(false);
       })
@@ -108,6 +110,7 @@ export default function ProfilePage() {
         body: JSON.stringify({
           outboundProxyUrl: proxyForm.outboundProxyUrl,
           outboundNoProxy: proxyForm.outboundNoProxy,
+          outboundProxyKillSwitch: proxyForm.outboundProxyKillSwitch,
         }),
       });
 
@@ -1051,6 +1054,19 @@ export default function ProfilePage() {
                   />
                   <p className="text-xs sm:text-sm text-text-muted">Comma-separated hostnames/domains to bypass the proxy.</p>
                 </div>
+
+                <div className="flex items-start sm:items-center justify-between gap-4 pt-2 border-t border-border/50">
+                  <div className="flex-1 min-w-0">
+                    <p className="font-medium text-sm sm:text-base">Kill Switch</p>
+                    <p className="text-xs sm:text-sm text-text-muted">When ON, block all outbound requests if proxy fails (no fallback to direct).</p>
+                  </div>
+                  <Toggle
+                    checked={proxyForm.outboundProxyKillSwitch === true}
+                    onChange={() => setProxyForm((prev) => ({ ...prev, outboundProxyKillSwitch: !prev.outboundProxyKillSwitch }))}
+                    disabled={loading || proxyLoading}
+                  />
+                </div>
+
 
                 <div className="pt-2 border-t border-border/50 flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
                   <Button
