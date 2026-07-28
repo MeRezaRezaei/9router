@@ -339,8 +339,9 @@ export async function proxyAwareFetch(url, options = {}, proxyOptions = null) {
       const dispatcher = await getDispatcher(proxyUrl);
       return await originalFetch(url, { ...options, dispatcher });
     } catch (proxyError) {
-      // If strictProxy is enabled, fail hard instead of falling back to direct
-      if (proxyOptions?.strictProxy === true) {
+      // If strictProxy is enabled (per-connection or global kill switch), fail hard instead of falling back to direct
+      const isStrict = proxyOptions?.strictProxy === true || process.env.NINE_ROUTER_STRICT_PROXY === "1";
+      if (isStrict) {
         throw new Error(`[ProxyFetch] Proxy required but failed (strictProxy=true): ${proxyError.message}`);
       }
       console.warn(`[ProxyFetch] Proxy failed, falling back to direct: ${proxyError.message}`);

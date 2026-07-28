@@ -80,6 +80,7 @@ async function handleSingleModelImage(body, modelStr, { wantsStream, binaryOutpu
       modelInfo: { provider, model },
       credentials: null,
       binaryOutput,
+      proxyOptions: null,
     });
     if (result.success) return result.response;
     return errorResponse(result.status || HTTP_STATUS.BAD_GATEWAY, result.error || "Image generation failed");
@@ -107,12 +108,20 @@ async function handleSingleModelImage(body, modelStr, { wantsStream, binaryOutpu
 
     const refreshedCredentials = await checkAndRefreshToken(provider, credentials);
 
+    const proxyOptions = {
+      connectionProxyEnabled: refreshedCredentials?.providerSpecificData?.connectionProxyEnabled === true,
+      connectionProxyUrl: refreshedCredentials?.providerSpecificData?.connectionProxyUrl || "",
+      connectionNoProxy: refreshedCredentials?.providerSpecificData?.connectionNoProxy || "",
+      vercelRelayUrl: refreshedCredentials?.providerSpecificData?.vercelRelayUrl || "",
+    };
+
     const result = await handleImageGenerationCore({
       body,
       modelInfo: { provider, model },
       credentials: refreshedCredentials,
       streamToClient: wantsStream,
       binaryOutput,
+      proxyOptions,
       onCredentialsRefreshed: async (newCreds) => {
         await updateProviderCredentials(credentials.connectionId, {
           accessToken: newCreds.accessToken,

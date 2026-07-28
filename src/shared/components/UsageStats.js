@@ -305,6 +305,19 @@ export default function UsageStats({ period: periodProp, setPeriod: setPeriodPro
     return () => es.close();
   }, []);
 
+  // Periodic REST re-fetch to update totals for current period
+  useEffect(() => {
+    const timer = setInterval(() => {
+      fetch(`/api/usage/stats?period=${period}`)
+        .then((r) => r.ok ? r.json() : null)
+        .then((data) => {
+          if (data) setStats((prev) => ({ ...prev, ...data }));
+        })
+        .catch(() => {});
+    }, 30000);
+    return () => clearInterval(timer);
+  }, [period]);
+
   const toggleSort = useCallback((tableType, field) => {
     const params = new URLSearchParams(searchParams.toString());
     if (params.get("sortBy") === field) {

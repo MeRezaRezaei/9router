@@ -15,5 +15,9 @@ export default {
     baseUrl: "http://localhost:11434/api/chat",
     format: "ollama",
   },
-  serviceKinds: ["llm"],
+  serviceKinds: ["llm", "embedding"],
+  embeddingConfig: {
+    baseUrl: "http://localhost:11434/api/embed",
+    authType: "none",
+  },
 };

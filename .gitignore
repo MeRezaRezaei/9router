@@ -86,3 +86,7 @@ graphify-out/*
 .codegraph/
 .PR/
 .next-analyze/*
+
+# Agent runtime artifacts
+.omo/
+.opencode/lsp.json

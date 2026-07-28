@@ -1,6 +1,7 @@
 // Microsoft Edge / Bing TTS (no auth) — via Bing translator endpoint
 import { Buffer } from "node:buffer";
 import { UA } from "./_base.js";
+import { proxyAwareFetch } from "../../utils/proxyFetch.js";
 
 const REFRESH_MS = 5 * 60 * 1000; // token TTL ~1h, refresh early
 const VOICES_TTL = 24 * 60 * 60 * 1000;
@@ -9,12 +10,12 @@ const cache = { token: null, tokenTime: 0 };
 let _voicesCache = null;
 let _voicesCacheTime = 0;
 
-async function getToken() {
+async function getToken(proxyOptions = null) {
   const now = Date.now();
   if (cache.token && now - cache.tokenTime < REFRESH_MS) return cache.token;
-  const res = await fetch("https://www.bing.com/translator", {
+  const res = await proxyAwareFetch("https://www.bing.com/translator", {
     headers: { "User-Agent": UA, "Accept-Language": "vi,en-US;q=0.9,en;q=0.8" },
-  });
+  }, proxyOptions);
   if (!res.ok) throw new Error(`Bing translator fetch failed: ${res.status}`);
   const rawCookies = res.headers.getSetCookie?.() || [];
   const cookie = rawCookies.map((c) => c.split(";")[0]).join("; ");
@@ -26,7 +27,7 @@ async function getToken() {
   return cache.token;
 }
 
-async function ttsRequest(text, voiceId, token) {
+async function ttsRequest(text, voiceId, token, proxyOptions = null) {
   const parts = voiceId.split("-");
   const xmlLang = parts.slice(0, 2).join("-");
   const gender = voiceId.toLowerCase().includes("male") ? "Male" : "Female";
@@ -35,7 +36,7 @@ async function ttsRequest(text, voiceId, token) {
   body.append("ssml", ssml);
   body.append("token", token.token);
   body.append("key", token.key);
-  return fetch("https://www.bing.com/tfettts?isVertical=1&&IG=1&IID=translator.5023&SFX=1", {
+  return proxyAwareFetch("https://www.bing.com/tfettts?isVertical=1&&IG=1&IID=translator.5023&SFX=1", {
     method: "POST",
     body: body.toString(),
     headers: {
@@ -46,16 +47,16 @@ async function ttsRequest(text, voiceId, token) {
       "User-Agent": UA,
       ...(token.cookie ? { "Cookie": token.cookie } : {}),
     },
-  });
+  }, proxyOptions);
 }
 
-export async function fetchEdgeTtsVoices() {
+export async function fetchEdgeTtsVoices(proxyOptions = null) {
   const now = Date.now();
   if (_voicesCache && now - _voicesCacheTime < VOICES_TTL) return _voicesCache;
-  const res = await fetch(
+  const res = await proxyAwareFetch(
     "https://speech.platform.bing.com/consumer/speech/synthesize/readaloud/voices/list?trustedclienttoken=6A5AA1D4EAFF4E9FB37E23D68491D6F4",
-    { headers: { "User-Agent": UA } }
-  );
+    { headers: { "User-Agent": UA } },
+    proxyOptions);
   if (!res.ok) throw new Error(`Edge TTS voices fetch failed: ${res.status}`);
   const voices = await res.json();
   _voicesCache = voices;
@@ -65,17 +66,17 @@ export async function fetchEdgeTtsVoices() {
 
 export default {
   noAuth: true,
-  async synthesize(text, model) {
+  async synthesize(text, model, credentials, responseFormat, { language, proxyOptions }) {
     const voiceId = model || "vi-VN-HoaiMyNeural";
-    let token = await getToken();
-    let res = await ttsRequest(text, voiceId, token);
+    let token = await getToken(proxyOptions);
+    let res = await ttsRequest(text, voiceId, token, proxyOptions);
 
     // 429/403: invalidate cache and retry once
     if (res.status === 429 || res.status === 403) {
       cache.token = null;
       cache.tokenTime = 0;
-      token = await getToken();
-      res = await ttsRequest(text, voiceId, token);
+      token = await getToken(proxyOptions);
+      res = await ttsRequest(text, voiceId, token, proxyOptions);
     }
 
     if (!res.ok) {

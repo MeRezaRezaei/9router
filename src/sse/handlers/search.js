@@ -131,12 +131,13 @@ async function handleSingleProviderSearch(body, providerInput, request, apiKey, 
 
   // No-auth providers (e.g. searxng) bypass credential lookup
   if (resolvedProvider.noAuth) {
-    log.info("AUTH", `\x1b[32m${providerId} no-auth mode\x1b[0m`);
+      log.info("AUTH", `\x1b[32m${providerId} no-auth mode\x1b[0m`);
     const result = await handleSearchCore({
       body: coreBody,
       provider: resolvedProvider,
       providerConfig,
       credentials: null,
+      proxyOptions: null,
       log
     });
     if (result.success) return result.response;
@@ -170,11 +171,19 @@ async function handleSingleProviderSearch(body, providerInput, request, apiKey, 
 
     const refreshedCredentials = await checkAndRefreshToken(providerId, credentials);
 
+    const proxyOptions = {
+      connectionProxyEnabled: refreshedCredentials?.providerSpecificData?.connectionProxyEnabled === true,
+      connectionProxyUrl: refreshedCredentials?.providerSpecificData?.connectionProxyUrl || "",
+      connectionNoProxy: refreshedCredentials?.providerSpecificData?.connectionNoProxy || "",
+      vercelRelayUrl: refreshedCredentials?.providerSpecificData?.vercelRelayUrl || "",
+    };
+
     const result = await handleSearchCore({
       body: coreBody,
       provider: resolvedProvider,
       providerConfig,
       credentials: refreshedCredentials,
+      proxyOptions,
       log,
       onCredentialsRefreshed: async (newCreds) => {
         await updateProviderCredentials(credentials.connectionId, {

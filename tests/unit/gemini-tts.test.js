@@ -1,4 +1,9 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+
+vi.mock("../../open-sse/utils/proxyFetch.js", () => ({
+  proxyAwareFetch: vi.fn((url, options) => fetch(url, options)),
+}));
+
 import { handleTtsCore } from "../../open-sse/handlers/ttsCore.js";
 import { buildTtsProviderModels } from "../../open-sse/config/ttsModels.js";
 

@@ -18,7 +18,7 @@ function validateProxyUrl(url) {
 }
 
 export function applyOutboundProxyEnv(
-  { outboundProxyEnabled, outboundProxyUrl, outboundNoProxy } = {}
+  { outboundProxyEnabled, outboundProxyUrl, outboundNoProxy, outboundProxyKillSwitch } = {}
 ) {
   if (typeof process === "undefined" || !process.env) return;
   const enabled = Boolean(outboundProxyEnabled);
@@ -35,6 +35,7 @@ export function applyOutboundProxyEnv(
       delete process.env.NINE_ROUTER_PROXY_MANAGED;
       delete process.env.NINE_ROUTER_PROXY_URL;
       delete process.env.NINE_ROUTER_NO_PROXY;
+      delete process.env.NINE_ROUTER_STRICT_PROXY;
     }
     return;
   }
@@ -68,6 +69,14 @@ export function applyOutboundProxyEnv(
       process.env.NINE_ROUTER_PROXY_URL = validated;
       managed = true;
     }
+  }
+
+  // Kill switch: fail hard when proxy unreachable
+  if (enabled && proxyUrl && outboundProxyKillSwitch === true) {
+    process.env.NINE_ROUTER_STRICT_PROXY = "1";
+    managed = true;
+  } else {
+    delete process.env.NINE_ROUTER_STRICT_PROXY;
   }
 
   if (noProxy) {
