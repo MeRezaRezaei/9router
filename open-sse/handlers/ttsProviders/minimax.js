@@ -32,7 +32,8 @@ export default async function minimaxTts({ baseUrl, apiKey, text, modelId, voice
         format: "mp3",
         channel: 1,
       },
-    }), proxyOptions);
+    }),
+  }, proxyOptions);
 
   const rawText = await res.text();
   let data = {};

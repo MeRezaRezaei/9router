@@ -56,7 +56,7 @@ export async function fetchEdgeTtsVoices(proxyOptions = null) {
   const res = await proxyAwareFetch(
     "https://speech.platform.bing.com/consumer/speech/synthesize/readaloud/voices/list?trustedclienttoken=6A5AA1D4EAFF4E9FB37E23D68491D6F4",
     { headers: { "User-Agent": UA } },
-    proxyOptions
+    proxyOptions);
   if (!res.ok) throw new Error(`Edge TTS voices fetch failed: ${res.status}`);
   const voices = await res.json();
   _voicesCache = voices;
