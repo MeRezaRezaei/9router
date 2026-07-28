@@ -1,4 +1,6 @@
-import { ProxyAgent, fetch as undiciFetch } from "undici";
+import { ProxyAgent, Agent, fetch as undiciFetch } from "undici";
+import { SocksClient } from "socks";
+import tls from "tls";
 
 const DEFAULT_TEST_URL = "https://google.com/";
 const DEFAULT_TIMEOUT_MS = 8000;
@@ -42,7 +44,46 @@ export async function testProxyUrl({ proxyUrl, testUrl, timeoutMs } = {}) {
 
   try {
     try {
-      dispatcher = new ProxyAgent({ uri: normalizedProxyUrl });
+      const u = new URL(normalizedProxyUrl);
+      if (u.protocol === "socks5:" || u.protocol === "socks5h:") {
+        dispatcher = new Agent({
+          connect: async (opts, callback) => {
+            try {
+              const port = opts.port ? parseInt(opts.port, 10) : (opts.protocol === 'https:' ? 443 : 80);
+              const { socket } = await SocksClient.createConnection({
+                proxy: {
+                  host: u.hostname,
+                  port: parseInt(u.port || "1080", 10),
+                  type: 5,
+                  userId: u.username || undefined,
+                  password: u.password || undefined,
+                },
+                command: 'connect',
+                destination: {
+                  host: opts.hostname,
+                  port
+                }
+              });
+              if (opts.protocol === 'https:') {
+                const tlsSocket = tls.connect({
+                  socket,
+                  servername: opts.hostname,
+                  rejectUnauthorized: false
+                }, () => {
+                  callback(null, tlsSocket);
+                });
+                tlsSocket.once('error', callback);
+              } else {
+                callback(null, socket);
+              }
+            } catch (e) {
+              callback(e);
+            }
+          }
+        });
+      } else {
+        dispatcher = new ProxyAgent({ uri: normalizedProxyUrl });
+      }
     } catch (err) {
       return {
         ok: false,

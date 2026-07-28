@@ -182,17 +182,22 @@ export const __test__ = {
 
 export async function proxy(request) {
   const { pathname } = request.nextUrl;
+  console.log(`[DashboardGuard] Request to ${pathname}`);
 
   // Local-only gate for spawn-capable / host-secret routes.
   if (LOCAL_ONLY_PATHS.some((p) => pathname.startsWith(p))) {
     if (!(await canAccessLocalOnlyRoute(request))) {
+      console.log(`[DashboardGuard] Blocked local-only path: ${pathname}`);
       return NextResponse.json({ error: "Local only: CLI token required" }, { status: 403 });
     }
   }
 
   // Always protected - require valid JWT or local CLI token (machineId-based)
   if (ALWAYS_PROTECTED.some((p) => pathname.startsWith(p))) {
-    if (await hasValidCliToken(request) || await hasValidToken(request))
+    const validCli = await hasValidCliToken(request);
+    const validTok = await hasValidToken(request);
+    console.log(`[DashboardGuard] Always protected path ${pathname}: cli=${validCli}, tok=${validTok}`);
+    if (validCli || validTok)
       return NextResponse.next();
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
@@ -205,7 +210,10 @@ export async function proxy(request) {
   // Deny-by-default for /api/* — public allow-list bypasses, everything else requires auth.
   if (pathname.startsWith("/api/")) {
     if (isPublicApi(pathname)) return NextResponse.next();
-    if (await hasValidCliToken(request) || await isAuthenticated(request))
+    const cliValid = await hasValidCliToken(request);
+    const authValid = await isAuthenticated(request);
+    console.log(`[DashboardGuard] API path ${pathname}: cli=${cliValid}, auth=${authValid}`);
+    if (cliValid || authValid)
       return NextResponse.next();
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }

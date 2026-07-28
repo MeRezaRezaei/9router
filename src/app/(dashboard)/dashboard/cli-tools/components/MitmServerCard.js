@@ -21,6 +21,12 @@ export default function MitmServerCard({ apiKeys, cloudEnabled, onStatusChange }
   const [mitmRouterBaseUrl, setMitmRouterBaseUrl] = useState(DEFAULT_MITM_ROUTER_BASE);
   const [port443Conflict, setPort443Conflict] = useState(null);
 
+  // SOCKS5 proxy state
+  const [socksEnabled, setSocksEnabled] = useState(false);
+  const [socksUrl, setSocksUrl] = useState("");
+  const [socksStatus, setSocksStatus] = useState({ type: "", message: "" });
+  const [socksSaving, setSocksSaving] = useState(false);
+
   const serverIsWindows = status?.isWin === true;
   const canRunWithoutPassword = serverIsWindows || status?.hasCachedPassword || status?.needsSudoPassword === false;
   const isAdmin = status?.isAdmin !== false;
@@ -43,11 +49,55 @@ export default function MitmServerCard({ apiKeys, cloudEnabled, onStatusChange }
     }
   }, [onStatusChange]);
 
+  // Load SOCKS proxy settings from /api/settings on mount
   useEffect(() => {
     queueMicrotask(() => {
       fetchStatus();
     });
+    fetch("/api/settings")
+      .then(r => r.ok ? r.json() : null)
+      .then(data => {
+        if (!data) return;
+        setSocksEnabled(data.mitmSocksProxyEnabled === true);
+        setSocksUrl(data.mitmSocksProxyUrl || "");
+      })
+      .catch(() => {});
   }, [fetchStatus]);
+
+  const saveSocksSettings = async (enabled, url) => {
+    setSocksSaving(true);
+    setSocksStatus({ type: "", message: "" });
+    try {
+      const res = await fetch("/api/settings", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ mitmSocksProxyEnabled: enabled, mitmSocksProxyUrl: url }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setSocksStatus({ type: "error", message: data.error || "Failed to save" });
+      } else {
+        setSocksEnabled(data.mitmSocksProxyEnabled === true);
+        setSocksUrl(data.mitmSocksProxyUrl || "");
+        setSocksStatus({ type: "success", message: status?.running ? "Saved — restart MITM server to apply" : "Saved" });
+      }
+    } catch {
+      setSocksStatus({ type: "error", message: "Network error" });
+    } finally {
+      setSocksSaving(false);
+    }
+  };
+
+  const handleSocksToggle = () => {
+    const next = !socksEnabled;
+    setSocksEnabled(next);
+    saveSocksSettings(next, socksUrl);
+  };
+
+  const handleSocksUrlSave = (e) => {
+    e.preventDefault();
+    saveSocksSettings(socksEnabled, socksUrl);
+  };
 
   const handleAction = (action) => {
     setActionError(null);
@@ -206,6 +256,65 @@ export default function MitmServerCard({ apiKeys, cloudEnabled, onStatusChange }
                   </datalist>
                 )}
               </div>
+            )}
+          </div>
+
+          {/* SOCKS5 Upstream Proxy — kill switch for provider-blocked regions */}
+          <div className="flex flex-col gap-2 rounded-lg border border-border/50 bg-surface/30 px-3 py-2">
+            <div className="flex items-center justify-between gap-2">
+              <div className="flex flex-col gap-0.5">
+                <span className="text-xs font-semibold text-text-main">SOCKS5 Upstream Proxy <span className="font-normal text-text-muted">(MITM only)</span></span>
+                <span className="text-[10px] text-text-muted">
+                  Route MITM upstream connections (Copilot, Antigravity, Kiro, Cursor) through a SOCKS5 proxy.
+                  For all other provider API calls and OAuth, configure the proxy in <span className="font-medium text-text-main">Settings → Network → Outbound Proxy</span>.
+                  Use <span className="font-mono">socks5h://</span> for remote DNS (no local DNS leak).
+                  Takes effect on next server start.
+                </span>
+              </div>
+              {/* Toggle */}
+              <button
+                type="button"
+                onClick={handleSocksToggle}
+                disabled={socksSaving}
+                className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none disabled:opacity-50 ${socksEnabled ? "bg-primary" : "bg-border"}`}
+                role="switch"
+                aria-checked={socksEnabled}
+              >
+                <span className={`pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${socksEnabled ? "translate-x-4" : "translate-x-0"}`} />
+              </button>
+            </div>
+
+            {socksEnabled && (
+              <form onSubmit={handleSocksUrlSave} className="flex flex-col gap-2">
+                <div className="grid gap-1 sm:grid-cols-[6rem_1fr_auto] sm:items-center sm:gap-2">
+                  <span className="text-xs text-text-muted sm:text-right">Proxy URL</span>
+                  <input
+                    type="text"
+                    value={socksUrl}
+                    onChange={(e) => setSocksUrl(e.target.value)}
+                    placeholder="socks5h://127.0.0.1:1080"
+                    className="flex-1 min-w-0 px-2 py-1.5 bg-surface rounded border border-border text-xs font-mono text-text-main focus:outline-none focus:ring-1 focus:ring-primary/50"
+                  />
+                  <button
+                    type="submit"
+                    disabled={socksSaving}
+                    className="px-3 py-1.5 rounded border border-primary/30 bg-primary/10 text-xs font-medium text-primary hover:bg-primary/20 disabled:opacity-50 transition-colors"
+                  >
+                    Save
+                  </button>
+                </div>
+                {socksStatus.message && (
+                  <p className={`text-[10px] ${socksStatus.type === "error" ? "text-red-500" : "text-green-600"}`}>
+                    {socksStatus.message}
+                  </p>
+                )}
+                {isRunning && (
+                  <p className="text-[10px] text-yellow-500 flex items-center gap-1">
+                    <span className="material-symbols-outlined text-[12px]">info</span>
+                    Stop and restart the MITM server for proxy changes to take effect.
+                  </p>
+                )}
+              </form>
             )}
           </div>
 

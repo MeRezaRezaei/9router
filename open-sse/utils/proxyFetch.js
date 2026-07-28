@@ -225,8 +225,58 @@ async function getDispatcher(proxyUrl) {
     if (proxyDispatchers.size >= MEMORY_CONFIG.proxyDispatchersMaxSize) {
       proxyDispatchers.delete(proxyDispatchers.keys().next().value);
     }
-    const { ProxyAgent } = await import("undici");
-    proxyDispatchers.set(normalized, new ProxyAgent({ uri: normalized }));
+    
+    try {
+      const u = new URL(normalized);
+      if (u.protocol === "socks5:" || u.protocol === "socks5h:") {
+        const { Agent } = await import("undici");
+        const { SocksClient } = await import("socks");
+        const tls = await import("tls");
+        
+        const agent = new Agent({
+          connect: async (opts, callback) => {
+            try {
+              const port = opts.port ? parseInt(opts.port, 10) : (opts.protocol === 'https:' ? 443 : 80);
+              const { socket } = await SocksClient.createConnection({
+                proxy: {
+                  host: u.hostname,
+                  port: parseInt(u.port || "1080", 10),
+                  type: 5,
+                  userId: u.username || undefined,
+                  password: u.password || undefined,
+                },
+                command: 'connect',
+                destination: {
+                  host: opts.hostname,
+                  port
+                }
+              });
+              if (opts.protocol === 'https:') {
+                const tlsSocket = tls.connect({
+                  socket,
+                  servername: opts.hostname,
+                  rejectUnauthorized: false
+                }, () => {
+                  callback(null, tlsSocket);
+                });
+                tlsSocket.once('error', callback);
+              } else {
+                callback(null, socket);
+              }
+            } catch (e) {
+              callback(e);
+            }
+          }
+        });
+        proxyDispatchers.set(normalized, agent);
+      } else {
+        const { ProxyAgent } = await import("undici");
+        proxyDispatchers.set(normalized, new ProxyAgent({ uri: normalized }));
+      }
+    } catch (e) {
+      console.warn(`[ProxyFetch] Failed to create dispatcher for ${normalized}:`, e.message);
+      return null;
+    }
   }
 
   return proxyDispatchers.get(normalized);

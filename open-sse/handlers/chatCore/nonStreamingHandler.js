@@ -241,6 +241,13 @@ export async function handleNonStreamingResponse({ providerResponse, provider, m
   const translatedResponse = needsTranslation(targetFormat, sourceFormat)
     ? translateNonStreamingResponse(responseBody, targetFormat, sourceFormat)
     : responseBody;
+  
+  // Rewrite model to match client-requested model
+  const requestedModel = clientRawRequest?.body?.model || `${provider}/${model}`;
+  if (translatedResponse && typeof translatedResponse === "object") {
+    translatedResponse.model = requestedModel;
+  }
+
   const isClaudeMessageResponse = sourceFormat === FORMATS.CLAUDE && translatedResponse?.type === "message";
 
   // Fix finish_reason for tool_calls: some providers return non-standard values (e.g. "other")
