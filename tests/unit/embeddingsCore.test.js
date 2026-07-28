@@ -644,3 +644,213 @@ describe("handleEmbeddingsCore — token refresh on 401/403", () => {
     expect(result.success).toBe(false);
   });
 });
+
+// ─── Test: ollama-local adapter ──────────────────────────────────────────────
+// ollama-local is registered as provider "ollama-local" and uses
+// resolveOllamaLocalHost (default: http://localhost:11434/api/embed).
+// No auth needed — headers are Content-Type only.
+
+describe("ollama-local adapter", () => {
+  beforeEach(() => {
+    vi.stubGlobal("fetch", vi.fn());
+  });
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("buildUrl → http://localhost:11434/api/embed (default host)", async () => {
+    vi.mocked(fetch).mockResolvedValueOnce(makeProviderResponse(VALID_EMBEDDING_RESPONSE));
+
+    await handleEmbeddingsCore(makeOptions({
+      body: { model: "nomic-embed-text", input: "hello" },
+      modelInfo: { provider: "ollama-local", model: "nomic-embed-text" },
+      credentials: {},            // no apiKey needed — authType: "none"
+    }));
+
+    const [url] = vi.mocked(fetch).mock.calls[0];
+    expect(url).toBe("http://localhost:11434/api/embed");
+  });
+
+  it("buildHeaders → Content-Type: application/json, no Authorization", async () => {
+    vi.mocked(fetch).mockResolvedValueOnce(makeProviderResponse(VALID_EMBEDDING_RESPONSE));
+
+    await handleEmbeddingsCore(makeOptions({
+      body: { model: "nomic-embed-text", input: "hello" },
+      modelInfo: { provider: "ollama-local", model: "nomic-embed-text" },
+      credentials: {},
+    }));
+
+    const [, init] = vi.mocked(fetch).mock.calls[0];
+    expect(init.headers["Content-Type"]).toBe("application/json");
+    expect(init.headers["Authorization"]).toBeUndefined();
+  });
+
+  it("buildBody → { model, input } only (no encoding_format)", async () => {
+    vi.mocked(fetch).mockResolvedValueOnce(makeProviderResponse(VALID_EMBEDDING_RESPONSE));
+
+    await handleEmbeddingsCore(makeOptions({
+      body: { model: "nomic-embed-text", input: "test text" },
+      modelInfo: { provider: "ollama-local", model: "nomic-embed-text" },
+      credentials: {},
+    }));
+
+    const [, init] = vi.mocked(fetch).mock.calls[0];
+    const sent = JSON.parse(init.body);
+    expect(sent).toEqual({ model: "nomic-embed-text", input: "test text" });
+  });
+
+  it("normalize → Ollama { embeddings, prompt_eval_count } → OpenAI format", async () => {
+    const ollamaBody = {
+      model: "nomic-embed-text",
+      embeddings: [[0.1, 0.2, 0.3]],
+      prompt_eval_count: 5,
+    };
+    vi.mocked(fetch).mockResolvedValueOnce(makeProviderResponse(ollamaBody));
+
+    const result = await handleEmbeddingsCore(makeOptions({
+      body: { model: "nomic-embed-text", input: "hello" },
+      modelInfo: { provider: "ollama-local", model: "nomic-embed-text" },
+      credentials: {},
+    }));
+
+    const body = await result.response.json();
+    expect(body.object).toBe("list");
+    expect(body.data).toHaveLength(1);
+    expect(body.data[0]).toEqual({
+      object: "embedding",
+      index: 0,
+      embedding: [0.1, 0.2, 0.3],
+    });
+    expect(body.usage.prompt_tokens).toBe(5);
+    expect(body.usage.total_tokens).toBe(5);
+    expect(body.model).toBe("nomic-embed-text");
+  });
+
+  it("normalize → empty embeddings array → empty data, counts tokens", async () => {
+    vi.mocked(fetch).mockResolvedValueOnce(makeProviderResponse({
+      model: "nomic-embed-text",
+      embeddings: [],
+      prompt_eval_count: 2,
+    }));
+
+    const result = await handleEmbeddingsCore(makeOptions({
+      body: { model: "nomic-embed-text", input: "x" },
+      modelInfo: { provider: "ollama-local", model: "nomic-embed-text" },
+      credentials: {},
+    }));
+
+    const body = await result.response.json();
+    expect(body.data).toEqual([]);
+    expect(body.usage.prompt_tokens).toBe(2);
+  });
+
+  it("normalize → missing embeddings field → empty data, zero usage", async () => {
+    vi.mocked(fetch).mockResolvedValueOnce(makeProviderResponse({ model: "test" }));
+
+    const result = await handleEmbeddingsCore(makeOptions({
+      body: { model: "nomic-embed-text", input: "x" },
+      modelInfo: { provider: "ollama-local", model: "nomic-embed-text" },
+      credentials: {},
+    }));
+
+    const body = await result.response.json();
+    expect(body.data).toEqual([]);
+    expect(body.usage.prompt_tokens).toBe(0);
+  });
+});
+
+// ─── Test: hybrid (em) adapter ───────────────────────────────────────────────
+// Hybrid uses model string format: {remoteProvider}/{mode}/{actualModel}.
+// mode="write" → delegates to remote provider's adapter.
+// mode="read"  → delegates to ollama-local adapter.
+
+describe("hybrid (em) adapter", () => {
+  beforeEach(() => {
+    vi.stubGlobal("fetch", vi.fn());
+  });
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("write mode → delegates to jina-ai adapter (URL, auth, model)", async () => {
+    vi.mocked(fetch).mockResolvedValueOnce(makeProviderResponse(VALID_EMBEDDING_RESPONSE));
+
+    await handleEmbeddingsCore(makeOptions({
+      body: { model: "jina-ai/write/jina-embeddings-v5-text-small", input: "test" },
+      modelInfo: {
+        provider: "em",
+        model: "jina-ai/write/jina-embeddings-v5-text-small",
+      },
+      credentials: { apiKey: "jina-test-key" },
+    }));
+
+    const [url, init] = vi.mocked(fetch).mock.calls[0];
+    expect(url).toBe("https://api.jina.ai/v1/embeddings");
+    expect(init.headers["Authorization"]).toBe("Bearer jina-test-key");
+    const sent = JSON.parse(init.body);
+    expect(sent.model).toBe("jina-embeddings-v5-text-small");
+    expect(sent.input).toBe("test");
+  });
+
+  it("read mode → delegates to ollama-local adapter", async () => {
+    const ollamaBody = {
+      model: "nomic-embed-text",
+      embeddings: [[0.1, 0.2]],
+      prompt_eval_count: 3,
+    };
+    vi.mocked(fetch).mockResolvedValueOnce(makeProviderResponse(ollamaBody));
+
+    const result = await handleEmbeddingsCore(makeOptions({
+      body: { model: "ollama/read/nomic-embed-text", input: "test read" },
+      modelInfo: {
+        provider: "em",
+        model: "ollama/read/nomic-embed-text",
+      },
+      credentials: {},
+    }));
+
+    const [url, init] = vi.mocked(fetch).mock.calls[0];
+    expect(url).toBe("http://localhost:11434/api/embed");
+    expect(init.headers["Authorization"]).toBeUndefined();
+    const sent = JSON.parse(init.body);
+    expect(sent.model).toBe("nomic-embed-text");
+
+    // response is normalized from Ollama format
+    const resBody = await result.response.json();
+    expect(resBody.data).toHaveLength(1);
+    expect(resBody.data[0].embedding).toEqual([0.1, 0.2]);
+  });
+
+  it("invalid model format (no slashes) → throws", async () => {
+    await expect(handleEmbeddingsCore(makeOptions({
+      body: { model: "justamodel", input: "test" },
+      modelInfo: { provider: "em", model: "justamodel" },
+      credentials: {},
+    }))).rejects.toThrow(/Invalid hybrid model/);
+  });
+
+  it("write mode → delegates to gemini adapter", async () => {
+    vi.mocked(fetch).mockResolvedValueOnce(makeProviderResponse({
+      embedding: { values: [0.5, 0.6] },
+    }));
+
+    await handleEmbeddingsCore(makeOptions({
+      body: {
+        model: "gemini/write/gemini-embedding-2",
+        input: "gemini write test",
+      },
+      modelInfo: {
+        provider: "em",
+        model: "gemini/write/gemini-embedding-2",
+      },
+      credentials: { apiKey: "gemini-key" },
+    }));
+
+    const [url] = vi.mocked(fetch).mock.calls[0];
+    expect(url).toContain("generativelanguage.googleapis.com");
+    expect(url).toContain("embedContent");
+    const [, init] = vi.mocked(fetch).mock.calls[0];
+    const sent = JSON.parse(init.body);
+    expect(sent.model).toBe("models/gemini-embedding-2");
+  });
+});

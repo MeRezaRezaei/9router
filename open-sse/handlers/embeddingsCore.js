@@ -41,7 +41,7 @@ export async function handleEmbeddingsCore({
 
   const ctx = { input };
   const url = adapter.buildUrl(model, credentials, ctx);
-  const headers = adapter.buildHeaders(credentials, ctx);
+  const headers = adapter.buildHeaders(credentials, ctx, model);
   const requestBody = adapter.buildBody(model, {
     input,
     encoding_format: body.encoding_format || "float",
@@ -82,7 +82,7 @@ export async function handleEmbeddingsCore({
       if (onCredentialsRefreshed) await onCredentialsRefreshed(newCredentials);
 
       try {
-        const retryHeaders = adapter.buildHeaders(credentials, ctx);
+        const retryHeaders = adapter.buildHeaders(credentials, ctx, model);
         const retryUrl = adapter.buildUrl(model, credentials, ctx);
         providerResponse = await proxyAwareFetch(retryUrl, {
           method: "POST",
