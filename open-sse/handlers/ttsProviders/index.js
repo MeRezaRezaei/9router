@@ -1,3 +1,4 @@
+import { parseModelVoice } from "./_base.js";
 // TTS provider registry
 import googleTts from "./googleTts.js";
 import edgeTts, { fetchEdgeTtsVoices } from "./edgeTts.js";
@@ -7,7 +8,7 @@ import openai from "./openai.js";
 import openrouter from "./openrouter.js";
 import gemini, { fetchGeminiVoices } from "./gemini.js";
 import { FORMAT_HANDLERS } from "./genericFormats.js";
-import { parseModelVoice } from "./_base.js";
+
 
 // Special providers with custom synthesize() logic
 const SPECIAL_ADAPTERS = {
@@ -26,14 +27,14 @@ export function getTtsAdapter(provider) {
 
 // Generic config-driven dispatcher (uses ttsConfig.format)
 export async function synthesizeViaConfig(provider, text, model, credentials, proxyOptions) {
-  const { AI_PROVIDERS } = await import("@/shared/constants/providers");
+  const { AI_PROVIDERS } = await import("../../../src/shared/constants/providers.js");
   const cfg = AI_PROVIDERS[provider]?.ttsConfig;
   if (!cfg) return null;
   const handler = FORMAT_HANDLERS[cfg.format];
   if (!handler) return null;
   const apiKey = credentials?.apiKey;
   if (cfg.authType !== "none" && !apiKey) throw new Error(`${provider} API key required`);
-  const { PROVIDER_MODELS } = await import("open-sse/config/providerModels.js");
+  const { PROVIDER_MODELS } = await import("../../config/providerModels.js");
   const ttsModels = (PROVIDER_MODELS[provider] || []).filter(m => (m.kind || m.type) === "tts");
   const defaultModel = ttsModels[0]?.id || "";
   const { modelId, voiceId } = parseModelVoice(model, defaultModel, "", ttsModels);
