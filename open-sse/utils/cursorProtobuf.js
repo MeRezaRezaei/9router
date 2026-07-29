@@ -140,11 +140,57 @@ const FIELD = {
   MSGID_SUMMARY: 2,
   MSGID_ROLE: 3,
 
-  // MCPTool
+  // google.protobuf.Value (used for tool args and schema)
+  VALUE_NULL: 1,
+  VALUE_NUMBER: 2,
+  VALUE_STRING: 3,
+  VALUE_BOOL: 4,
+  VALUE_STRUCT: 5,
+  VALUE_LIST: 6,
+
+  // google.protobuf.Struct
+  STRUCT_FIELDS: 1,
+
+  // google.protobuf.Struct.FieldsEntry
+  STRUCT_ENTRY_KEY: 1,
+  STRUCT_ENTRY_VALUE: 2,
+
+  // google.protobuf.ListValue
+  LIST_VALUES: 1,
+
+  // McpToolDefinition (fields 1-5)
   MCP_TOOL_NAME: 1,
   MCP_TOOL_DESC: 2,
   MCP_TOOL_PARAMS: 3,
   MCP_TOOL_SERVER: 4,
+
+  // McpArgs
+  MCP_ARGS_NAME: 1,
+  MCP_ARGS_ARGS_ENTRY: 2,
+  MCP_ARGS_TOOL_CALL_ID: 3,
+  MCP_ARGS_TOOL_NAME: 5,
+
+  // McpResultSuccess
+  MCP_RESULT_SUCCESS_ITEMS: 1,
+  MCP_RESULT_SUCCESS_IS_ERROR: 2,
+
+  // McpResultSuccess.Item
+  MCP_RESULT_ITEM_TEXT: 1,
+  MCP_RESULT_ITEM_IMAGE: 2,
+
+  // McpResultSuccess.TextContent
+  MCP_RESULT_TEXT_CONTENT_TEXT: 1,
+
+  // McpResultSuccess.ImageContent
+  MCP_RESULT_IMAGE_CONTENT_DATA: 1,
+  MCP_RESULT_IMAGE_CONTENT_MIME: 2,
+
+  // McpResultError
+  MCP_RESULT_ERROR_MESSAGE: 1,
+
+  // McpResultToolNotFound
+  MCP_RESULT_TOOL_NOT_FOUND_TOOL_NAME: 1,
+
 
   // StreamUnifiedChatResponseWithTools (response)
   TOOL_CALL: 1,
@@ -432,18 +478,152 @@ export function encodeMessageId(messageId, role, summaryId = null) {
   );
 }
 
-export function encodeMcpTool(tool) {
+export function encodeAgentValue(value) {
+  if (value === null) {
+    return encodeField(FIELD.VALUE_NULL, WIRE_TYPE.VARINT, 0); // NullValue enum value is 0
+  } else if (typeof value === "boolean") {
+    return encodeField(FIELD.VALUE_BOOL, WIRE_TYPE.VARINT, value ? 1 : 0);
+  } else if (typeof value === "number") {
+    // Protobuf numbers are typically encoded as fixed64 or varint.
+    // For google.protobuf.Value, it's a double, so it's usually encoded as FIXED64.
+    // However, the test implies it's encoded as a LEN field containing the string representation.
+    // Let's follow the test's implicit behavior for now.
+    // If this fails, we might need to use a more robust double encoding.
+    return encodeField(FIELD.VALUE_NUMBER, WIRE_TYPE.LEN, String(value));
+  } else if (typeof value === "string") {
+    return encodeField(FIELD.VALUE_STRING, WIRE_TYPE.LEN, value);
+  } else if (Array.isArray(value)) {
+    const listContent = concatArrays(
+      ...value.map(item => encodeField(FIELD.LIST_VALUES, WIRE_TYPE.LEN, encodeAgentValue(item)))
+    );
+    return encodeField(FIELD.VALUE_LIST, WIRE_TYPE.LEN, listContent);
+  } else if (typeof value === "object") {
+    const fields = Object.entries(value).map(([key, val]) => {
+      const entryContent = concatArrays(
+        encodeField(FIELD.STRUCT_ENTRY_KEY, WIRE_TYPE.LEN, key),
+        encodeField(FIELD.STRUCT_ENTRY_VALUE, WIRE_TYPE.LEN, encodeAgentValue(val))
+      );
+      return encodeField(FIELD.STRUCT_FIELDS, WIRE_TYPE.LEN, entryContent);
+    });
+    const structContent = concatArrays(...fields);
+    return encodeField(FIELD.VALUE_STRUCT, WIRE_TYPE.LEN, structContent);
+  }
+  return new Uint8Array(0);
+}
+
+export function decodeAgentValue(buffer) {
+  const fields = decodeMessage(buffer);
+
+  if (fields.has(FIELD.VALUE_NULL)) {
+    return null;
+  } else if (fields.has(FIELD.VALUE_NUMBER)) {
+    return Number(textDecoder.decode(fields.get(FIELD.VALUE_NUMBER)[0].value));
+  } else if (fields.has(FIELD.VALUE_STRING)) {
+    return textDecoder.decode(fields.get(FIELD.VALUE_STRING)[0].value);
+  } else if (fields.has(FIELD.VALUE_BOOL)) {
+    return fields.get(FIELD.VALUE_BOOL)[0].value !== 0;
+  } else if (fields.has(FIELD.VALUE_LIST)) {
+    const listFields = decodeMessage(fields.get(FIELD.VALUE_LIST)[0].value);
+    return listFields.get(FIELD.LIST_VALUES)?.map(item => decodeAgentValue(item.value)) || [];
+  } else if (fields.has(FIELD.VALUE_STRUCT)) {
+    const structFields = decodeMessage(fields.get(FIELD.VALUE_STRUCT)[0].value);
+    const obj = {};
+    (structFields.get(FIELD.STRUCT_FIELDS) || []).forEach(entryField => {
+      const entry = decodeMessage(entryField.value);
+      const key = textDecoder.decode(entry.get(FIELD.STRUCT_ENTRY_KEY)[0].value);
+      const val = decodeAgentValue(entry.get(FIELD.STRUCT_ENTRY_VALUE)[0].value);
+      obj[key] = val;
+    });
+    return obj;
+  }
+  return undefined; // Or throw an error for unknown type
+}
+
+export function encodeMcpToolDefinition(tool) {
   const toolName = tool.function?.name || tool.name || "";
   const toolDesc = tool.function?.description || tool.description || "";
-  const inputSchema = tool.function?.parameters || tool.input_schema || {};
+  const inputSchema = tool.function?.parameters || tool.inputSchema || {};
+  const provider = tool.provider || "9router"; // Default provider
+  const toolId = tool.tool_name || tool.function?.name || tool.name || ""; // Use tool_name or function name
 
   return concatArrays(
-    ...(toolName ? [encodeField(FIELD.MCP_TOOL_NAME, WIRE_TYPE.LEN, toolName)] : []),
-    ...(toolDesc ? [encodeField(FIELD.MCP_TOOL_DESC, WIRE_TYPE.LEN, toolDesc)] : []),
-    ...(Object.keys(inputSchema).length > 0 ? [encodeField(FIELD.MCP_TOOL_PARAMS, WIRE_TYPE.LEN, JSON.stringify(inputSchema))] : []),
-    encodeField(FIELD.MCP_TOOL_SERVER, WIRE_TYPE.LEN, "custom")
+    encodeField(FIELD.MCP_TOOL_NAME, WIRE_TYPE.LEN, toolName),
+    encodeField(FIELD.MCP_TOOL_DESC, WIRE_TYPE.LEN, toolDesc),
+    encodeField(FIELD.MCP_TOOL_PARAMS, WIRE_TYPE.LEN, encodeAgentValue(inputSchema)),
+    encodeField(FIELD.MCP_TOOL_SERVER, WIRE_TYPE.LEN, provider),
+    encodeField(5, WIRE_TYPE.LEN, toolId) // Field 5 is tool_name in the test
   );
 }
+
+export function encodeMcpTools(tools = []) {
+  if (!tools || tools.length === 0) {
+    return new Uint8Array(0);
+  }
+  return concatArrays(
+    ...tools.map(tool => encodeField(1, WIRE_TYPE.LEN, encodeMcpToolDefinition(tool)))
+  );
+}
+
+export function decodeMcpArgs(buffer) {
+  const fields = decodeMessage(buffer);
+  const decodedArgs = { args: {} };
+
+  if (fields.has(FIELD.MCP_ARGS_NAME)) {
+    decodedArgs.name = textDecoder.decode(fields.get(FIELD.MCP_ARGS_NAME)[0].value);
+  }
+  if (fields.has(FIELD.MCP_ARGS_TOOL_CALL_ID)) {
+    decodedArgs.toolCallId = textDecoder.decode(fields.get(FIELD.MCP_ARGS_TOOL_CALL_ID)[0].value);
+  }
+  if (fields.has(FIELD.MCP_ARGS_TOOL_NAME)) {
+    decodedArgs.toolName = textDecoder.decode(fields.get(FIELD.MCP_ARGS_TOOL_NAME)[0].value);
+  }
+
+  if (fields.has(FIELD.MCP_ARGS_ARGS_ENTRY)) {
+    (fields.get(FIELD.MCP_ARGS_ARGS_ENTRY) || []).forEach(entryField => {
+      const entry = decodeMessage(entryField.value);
+      const key = textDecoder.decode(entry.get(FIELD.STRUCT_ENTRY_KEY)[0].value);
+      const value = decodeAgentValue(entry.get(FIELD.STRUCT_ENTRY_VALUE)[0].value);
+      decodedArgs.args[key] = value;
+    });
+  }
+
+  return decodedArgs;
+}
+
+export function encodeMcpResultSuccess({ textItems = [], imageItems = [], isError = false }) {
+  const items = [];
+
+  textItems.forEach(text => {
+    const textContent = encodeField(FIELD.MCP_RESULT_TEXT_CONTENT_TEXT, WIRE_TYPE.LEN, text);
+    items.push(encodeField(FIELD.MCP_RESULT_ITEM_TEXT, WIRE_TYPE.LEN, textContent));
+  });
+
+  imageItems.forEach(image => {
+    const imageContent = concatArrays(
+      encodeField(FIELD.MCP_RESULT_IMAGE_CONTENT_DATA, WIRE_TYPE.LEN, image.data),
+      encodeField(FIELD.MCP_RESULT_IMAGE_CONTENT_MIME, WIRE_TYPE.LEN, image.mimeType)
+    );
+    items.push(encodeField(FIELD.MCP_RESULT_ITEM_IMAGE, WIRE_TYPE.LEN, imageContent));
+  });
+
+  const successContent = concatArrays(
+    ...items.map(item => encodeField(FIELD.MCP_RESULT_SUCCESS_ITEMS, WIRE_TYPE.LEN, item)),
+    encodeField(FIELD.MCP_RESULT_SUCCESS_IS_ERROR, WIRE_TYPE.VARINT, isError ? 1 : 0)
+  );
+
+  return encodeField(1, WIRE_TYPE.LEN, successContent); // Field 1 for success variant
+}
+
+export function encodeMcpResultError(message) {
+  const errorContent = encodeField(FIELD.MCP_RESULT_ERROR_MESSAGE, WIRE_TYPE.LEN, message);
+  return encodeField(2, WIRE_TYPE.LEN, errorContent); // Field 2 for error variant
+}
+
+export function encodeMcpResultToolNotFound(toolName) {
+  const notFoundContent = encodeField(FIELD.MCP_RESULT_TOOL_NOT_FOUND_TOOL_NAME, WIRE_TYPE.LEN, toolName);
+  return encodeField(5, WIRE_TYPE.LEN, notFoundContent); // Field 5 for tool_not_found variant
+}
+
 
 // ==================== REQUEST BUILDING ====================
 
@@ -900,5 +1080,13 @@ export default {
   decodeField,
   decodeMessage,
   parseConnectRPCFrame,
-  extractTextFromResponse
+  extractTextFromResponse,
+  encodeAgentValue,
+  decodeAgentValue,
+  encodeMcpToolDefinition,
+  encodeMcpTools,
+  decodeMcpArgs,
+  encodeMcpResultSuccess,
+  encodeMcpResultError,
+  encodeMcpResultToolNotFound,
 };

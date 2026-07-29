@@ -7,7 +7,8 @@ import {
   wrapConnectRPCFrame,
   decodeMessage,
   parseConnectRPCFrame,
-  extractTextFromResponse
+  extractTextFromResponse,
+  encodeMcpTools
 } from "../utils/cursorProtobuf.js";
 import { buildCursorHeaders } from "../utils/cursorChecksum.js";
 import { estimateUsage } from "../utils/usageTracking.js";
@@ -95,7 +96,16 @@ function encodeHistoryMessage(message) {
   return agentMessage(1, agentMessage(1, agentMessage(1, text)));
 }
 
-function buildAgentRunFrame(messages, model) {
+export function isAgentCapableRequest(body) {
+  if (isAgentTextRequest(body)) return true;
+  if (body?.tools?.length > 0) return true;
+  // Check history for assistant tool_calls which require agent mode
+  if (body?.messages?.some(m => m.role === "assistant" && m.tool_calls?.length > 0)) return true;
+  if (body?.messages?.some(m => m.role === "tool")) return true;
+  return false;
+}
+
+export function buildAgentRunFrame(messages, model, tools) {
   const system = messages
     .filter((message) => message?.role === "system")
     .map((message) => textFromContent(message.content))
@@ -127,8 +137,9 @@ function buildAgentRunFrame(messages, model) {
   const runRequest = concatBuffers(
     // An empty ConversationStateStructure starts a fresh local agent session.
     agentMessage(1, new Uint8Array()),
-    agentMessage(2, conversationAction),
     ...(system ? [agentString(8, system)] : []),
+    agentMessage(2, conversationAction),
+    ...(tools?.length ? [agentMessage(4, encodeMcpTools(tools))] : []),
     agentMessage(9, requestedModel),
   );
 

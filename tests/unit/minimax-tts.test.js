@@ -46,7 +46,8 @@ describe("MiniMax TTS", () => {
           "Content-Type": "application/json",
           Authorization: "Bearer test-key",
         }),
-      })
+      }),
+      null,
     );
 
     const sent = JSON.parse(global.fetch.mock.calls[0][1].body);
