@@ -273,6 +273,11 @@ function getContentBlocksFromMessage(msg, toolNameMap = new Map()) {
       }
     }
 
+    // Map OpenAI reasoning_content → Claude thinking block (prepended before text/content).
+    if (msg.reasoning_content && typeof msg.reasoning_content === "string") {
+      blocks.unshift({ type: CLAUDE_BLOCK.THINKING, thinking: msg.reasoning_content });
+    }
+
     if (msg.tool_calls && Array.isArray(msg.tool_calls)) {
       for (const tc of msg.tool_calls) {
         if (tc.type === OPENAI_BLOCK.FUNCTION) {

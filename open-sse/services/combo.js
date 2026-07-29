@@ -127,7 +127,12 @@ export function detectRequiredCapabilities(body) {
   const contents = body.contents || body.request?.contents;                      // gemini / antigravity
   for (const c of trailingUserItems(contents)) scanContent(c.parts);
 
-  // search: temporarily disabled in auto-switch (feature not wired yet).
+  // Detect search capability from top-level tools array
+  if (Array.isArray(body.tools)) {
+    for (const tool of body.tools) {
+      if (tool?.type === "web_search") { required.add("search"); break; }
+    }
+  }
 
   return required;
 }
