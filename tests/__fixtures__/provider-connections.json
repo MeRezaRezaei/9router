@@ -1,0 +1,7 @@
+[
+  { "provider": "openai", "apiKey": "sk-...", "label": "default" },
+  { "provider": "anthropic", "apiKey": "sk-ant-...", "label": "work" },
+  { "provider": "gemini", "apiKey": "at-...", "label": "personal" },
+  { "provider": "openrouter", "apiKey": "sk-or-...", "label": "dev" },
+  { "provider": "kiro", "apiKey": "kiro-...", "label": "test" }
+]

@@ -1,22 +1,24 @@
 import { describe, it, expect } from "vitest";
+import { loadFixture } from "../helpers/load-fixture.js";
 
-const CANONICAL_PROXY = {
-  connectionProxyEnabled: true,
-  connectionProxyUrl: "socks5://127.0.0.1:1080",
-  connectionNoProxy: "",
-  vercelRelayUrl: "",
-};
 
 describe("proxyOptions shape (canonical pattern)", () => {
   it("builds correct proxyOptions when connectionProxyEnabled === true", () => {
-    const creds = { providerSpecificData: { connectionProxyEnabled: true, connectionProxyUrl: "socks5://127.0.0.1:1080", connectionNoProxy: "", vercelRelayUrl: "" } };
+    const fixtureData = loadFixture('provider-connections');
+    const canonicalProxy = {
+      connectionProxyEnabled: true,
+      connectionProxyUrl: "socks5://127.0.0.1:1080",
+      connectionNoProxy: "",
+      vercelRelayUrl: "",
+    };
+    const creds = { providerSpecificData: canonicalProxy };
     const proxyOptions = {
       connectionProxyEnabled: creds?.providerSpecificData?.connectionProxyEnabled === true,
       connectionProxyUrl: creds?.providerSpecificData?.connectionProxyUrl || "",
       connectionNoProxy: creds?.providerSpecificData?.connectionNoProxy || "",
       vercelRelayUrl: creds?.providerSpecificData?.vercelRelayUrl || "",
     };
-    expect(proxyOptions).toEqual(CANONICAL_PROXY);
+    expect(proxyOptions).toEqual(canonicalProxy);
   });
 
   it("builds empty proxyOptions when no proxy fields", () => {

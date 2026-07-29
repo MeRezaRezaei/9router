@@ -31,6 +31,7 @@ vi.mock("../../open-sse/utils/proxyFetch.js", () => ({
 }));
 
 import { handleEmbeddingsCore } from "../../open-sse/handlers/embeddingsCore.js";
+import { loadFixture } from "../helpers/load-fixture.js";
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -50,19 +51,7 @@ function makeProviderErrorResponse(status, message) {
   });
 }
 
-/** Standard valid embeddings response in OpenAI format */
-const VALID_EMBEDDING_RESPONSE = {
-  object: "list",
-  data: [
-    {
-      object: "embedding",
-      index: 0,
-      embedding: [0.1, 0.2, 0.3],
-    },
-  ],
-  model: "text-embedding-ada-002",
-  usage: { prompt_tokens: 3, total_tokens: 3 },
-};
+const VALID_EMBEDDING_RESPONSE = loadFixture('embeddings-sample');
 
 /** Standard handleEmbeddingsCore options for OpenAI provider */
 function makeOptions(overrides = {}) {

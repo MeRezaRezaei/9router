@@ -9,6 +9,7 @@
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import { loadFixture } from "../helpers/load-fixture.js";
 
 // Mock fetch globally
 const originalFetch = global.fetch;
@@ -22,12 +23,12 @@ describe("Provider Validation API", () => {
     global.fetch = originalFetch;
   });
 
-  describe("OpenAI Compatible", () => {
-    it("should return valid:true when /models succeeds", async () => {
-      global.fetch = vi.fn().mockResolvedValue({
-        ok: true,
-        json: () => Promise.resolve({ data: [] }),
-      });
+describe("OpenAI Compatible", () => {
+  it("should return true for a valid OpenAI-compatible provider", async () => {
+    global.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: () => Promise.resolve(loadFixture('v1-models')),
+    });
 
       // Simulate the validation logic
       const baseUrl = "https://api.openai.com/v1";

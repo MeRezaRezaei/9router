@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
+import { loadFixture } from "../helpers/load-fixture.js";
 
 const mocks = vi.hoisted(() => ({
   nextResponse: Symbol("next"),
@@ -48,7 +49,7 @@ function request(pathname, headers = {}) {
 describe("dashboard guard public LLM API access", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    mocks.getSettings.mockResolvedValue({ requireLogin: true });
+    mocks.getSettings.mockResolvedValue(loadFixture("provider-connections").settings);
     mocks.validateApiKey.mockResolvedValue(false);
     mocks.getConsistentMachineId.mockResolvedValue("cli-token");
     mocks.verifyDashboardAuthToken.mockResolvedValue(false);
@@ -191,7 +192,7 @@ describe("dashboard guard public LLM API access", () => {
 describe("dashboard guard local-only access", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    mocks.getSettings.mockResolvedValue({ requireLogin: true });
+    mocks.getSettings.mockResolvedValue(loadFixture("provider-connections").settings);
     mocks.validateApiKey.mockResolvedValue(false);
     mocks.getConsistentMachineId.mockResolvedValue("cli-token");
     mocks.verifyDashboardAuthToken.mockResolvedValue(false);
@@ -217,7 +218,7 @@ describe("dashboard guard local-only access", () => {
   });
 
   it("allows local-only route on loopback when requireLogin=false", async () => {
-    mocks.getSettings.mockResolvedValue({ requireLogin: false });
+    mocks.getSettings.mockResolvedValue({ ...loadFixture("provider-connections").settings, requireLogin: false });
 
     const response = await proxy(request("/api/cli-tools/antigravity-mitm", {
       host: "localhost:20128",
