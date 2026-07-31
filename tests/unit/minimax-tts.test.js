@@ -38,17 +38,17 @@ describe("MiniMax TTS", () => {
     });
 
     expect(result.success).toBe(true);
-    expect(global.fetch).toHaveBeenCalledWith(
-      "https://api.minimax.io/v1/t2a_v2",
-      expect.objectContaining({
-        method: "POST",
-        headers: expect.objectContaining({
-          "Content-Type": "application/json",
-          Authorization: "Bearer test-key",
+      expect(global.fetch).toHaveBeenCalledWith(
+        "https://api.minimax.io/v1/t2a_v2",
+        expect.objectContaining({
+          method: "POST",
+          headers: expect.objectContaining({
+            "Content-Type": "application/json",
+            Authorization: "Bearer test-key",
+          }),
         }),
-      }),
-      null,
-    );
+        null
+      );
 
     const sent = JSON.parse(global.fetch.mock.calls[0][1].body);
     expect(sent).toMatchObject({
