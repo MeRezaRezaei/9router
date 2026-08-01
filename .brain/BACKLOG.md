@@ -18,6 +18,6 @@ Current active tasks.
 - [x] Split off statistics stack and implement audit/trash logs database with enhanced logging
 - [x] Implement Vault-only sensitive fields storage (apiKey, accessToken, refreshToken, idToken) referencing UUIDs from SQLite DB (with Redis write-through cache observer)
 - [x] Implement provider model aggregation and de-duplication based on similarity matching (OpenRouter, DeepSeek direct, Zen DeepSeek)
-- [ ] Enrich provider data structures (send/receive/offers) to support aggregation, and allow free providers key insertion without crashes
-- [ ] Add an AI aggregation/mapping optimization button to the dashboard using an LLM to recommend groupings
+- [x] Enrich provider data structures (send/receive/offers) to support aggregation, and allow free providers key insertion without crashes
+- [x] Add an AI aggregation/mapping optimization button to the dashboard using an LLM to recommend groupings
 - [x] Verify outbound SOCKS proxy settings are properly cached and handled dynamically in Redis
