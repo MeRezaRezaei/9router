@@ -1,7 +1,7 @@
 import { v4 as uuidv4 } from "uuid";
 import { getAdapter } from "../driver.js";
 import { parseJson, stringifyJson } from "../helpers/jsonCol.js";
-import { redisGet, redisSet, redisClearPrefix } from "../../redis.js";
+import { redisGet, redisSet, redisDel, redisClearPrefix } from "../../redis.js";
 import { vaultRead, vaultWrite, vaultDelete } from "../../vault.js";
 
 async function enrichSecrets(conn) {
@@ -106,10 +106,18 @@ export async function getProviderConnections(filter = {}) {
 }
 
 export async function getProviderConnectionById(id) {
+  const cacheKey = `9router:cache:connection:${id}`;
+  const cached = await redisGet(cacheKey);
+  if (cached) return cached;
+
   const db = await getAdapter();
   const row = db.get(`SELECT * FROM providerConnections WHERE id = ?`, [id]);
   const conn = rowToConn(row);
-  return await enrichSecrets(conn);
+  const res = await enrichSecrets(conn);
+  if (res) {
+    await redisSet(cacheKey, res, 300);
+  }
+  return res;
 }
 
 // Internal sync reorder — must be called INSIDE a transaction
@@ -230,6 +238,10 @@ export async function createProviderConnection(data) {
   // Enrich result with complete secrets from Vault
   await enrichSecrets(result);
 
+  if (result) {
+    await redisSet(`9router:cache:connection:${result.id}`, result, 300);
+  }
+
   await redisClearPrefix("9router:cache:connections:");
   return result;
 }
@@ -277,6 +289,10 @@ export async function updateProviderConnection(id, data) {
   // Enrich result with complete secrets from Vault
   await enrichSecrets(result);
 
+  if (result) {
+    await redisSet(`9router:cache:connection:${id}`, result, 300);
+  }
+
   await redisClearPrefix("9router:cache:connections:");
   return result;
 }
@@ -293,6 +309,7 @@ export async function deleteProviderConnection(id) {
   });
   if (ok) {
     await vaultDelete(id);
+    await redisDel(`9router:cache:connection:${id}`);
   }
   await redisClearPrefix("9router:cache:connections:");
   return ok;

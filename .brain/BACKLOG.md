@@ -16,3 +16,8 @@ Current active tasks.
 - [x] Integrate Redis for configuration/route caching and speed optimization
 - [x] Integrate Vault for secure provider credentials/data storage
 - [x] Split off statistics stack and implement audit/trash logs database with enhanced logging
+- [ ] Implement Vault-only sensitive fields storage (apiKey, accessToken, refreshToken, idToken) referencing UUIDs from SQLite DB (with Redis write-through cache observer)
+- [ ] Implement provider model aggregation and de-duplication based on similarity matching (OpenRouter, DeepSeek direct, Zen DeepSeek)
+- [ ] Enrich provider data structures (send/receive/offers) to support aggregation, and allow free providers key insertion without crashes
+- [ ] Add an AI aggregation/mapping optimization button to the dashboard using an LLM to recommend groupings
+- [ ] Verify outbound SOCKS proxy settings are properly cached and handled dynamically in Redis
