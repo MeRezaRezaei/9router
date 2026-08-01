@@ -1,4 +1,4 @@
-import { getAdapter } from "../driver.js";
+import { getLogsAdapter } from "../driver.js";
 import { parseJson, stringifyJson } from "../helpers/jsonCol.js";
 
 const DEFAULT_MAX_RECORDS = 200;
@@ -76,7 +76,7 @@ async function flushToDatabase() {
     // Drain entire buffer (loop in case more pushed during await)
     while (writeBuffer.length > 0) {
       const items = writeBuffer.splice(0, writeBuffer.length);
-      const db = await getAdapter();
+      const db = await getLogsAdapter();
       const config = await getObservabilityConfig();
 
       db.transaction(() => {
@@ -143,7 +143,7 @@ export async function saveRequestDetail(detail) {
 }
 
 export async function getRequestDetails(filter = {}) {
-  const db = await getAdapter();
+  const db = await getLogsAdapter();
   const conds = [];
   const params = [];
 
@@ -176,13 +176,13 @@ export async function getRequestDetails(filter = {}) {
 }
 
 export async function getDistinctProviders() {
-  const db = await getAdapter();
+  const db = await getLogsAdapter();
   const rows = db.all(`SELECT DISTINCT provider FROM requestDetails WHERE provider IS NOT NULL ORDER BY provider ASC`);
   return rows.map((r) => r.provider);
 }
 
 export async function getRequestDetailById(id) {
-  const db = await getAdapter();
+  const db = await getLogsAdapter();
   const row = db.get(`SELECT data FROM requestDetails WHERE id = ?`, [id]);
   return row ? parseJson(row.data, null) : null;
 }

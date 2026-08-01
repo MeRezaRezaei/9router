@@ -106,6 +106,15 @@ export const TABLES = {
     primaryKey: "PRIMARY KEY (scope, key)",
     indexes: ["CREATE INDEX IF NOT EXISTS idx_kv_scope ON kv(scope)"],
   },
+};
+
+export const LOGS_TABLES = {
+  _meta: {
+    columns: {
+      key: "TEXT PRIMARY KEY",
+      value: "TEXT NOT NULL",
+    },
+  },
   usageHistory: {
     columns: {
       id: "INTEGER PRIMARY KEY AUTOINCREMENT",

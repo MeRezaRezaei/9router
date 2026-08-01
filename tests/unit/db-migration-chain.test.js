@@ -12,13 +12,16 @@ beforeEach(() => {
   process.env.DATA_DIR = tempDir;
   // Reset global singleton so each test gets fresh adapter pointed at tempDir
   delete global._dbAdapter;
+  delete global._logsAdapter;
   vi.resetModules();
 });
 
 afterEach(() => {
   // Close adapter to release file handles before rm
   try { global._dbAdapter?.instance?.close?.(); } catch {}
+  try { global._logsAdapter?.instance?.close?.(); } catch {}
   delete global._dbAdapter;
+  delete global._logsAdapter;
   if (tempDir) fs.rmSync(tempDir, { recursive: true, force: true });
   if (originalDataDir === undefined) delete process.env.DATA_DIR;
   else process.env.DATA_DIR = originalDataDir;
@@ -26,7 +29,7 @@ afterEach(() => {
 
 describe("Schema migrations", () => {
   it("fresh DB → applies migrations & stamps schemaVersion", async () => {
-    const { getAdapter } = await import("@/lib/db/driver.js");
+    const { getAdapter, getLogsAdapter } = await import("@/lib/db/driver.js");
     const { latestVersion } = await import("@/lib/db/migrations/index.js");
     const db = await getAdapter();
     const row = db.get(`SELECT value FROM _meta WHERE key='schemaVersion'`);
@@ -35,7 +38,13 @@ describe("Schema migrations", () => {
     const tables = db.all(`SELECT name FROM sqlite_master WHERE type='table'`).map(t => t.name);
     expect(tables).toEqual(expect.arrayContaining([
       "_meta", "settings", "providerConnections", "providerNodes",
-      "proxyPools", "apiKeys", "combos", "kv", "usageHistory", "usageDaily", "requestDetails",
+      "proxyPools", "apiKeys", "combos", "kv",
+    ]));
+
+    const logsDb = await getLogsAdapter();
+    const logTables = logsDb.all(`SELECT name FROM sqlite_master WHERE type='table'`).map(t => t.name);
+    expect(logTables).toEqual(expect.arrayContaining([
+      "_meta", "usageHistory", "usageDaily", "requestDetails",
     ]));
   });
 

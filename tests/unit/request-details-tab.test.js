@@ -24,11 +24,15 @@ beforeAll(async () => {
   await db.initDb();
   await db.updateSettings({ enableObservability2: true, observabilityBatchSize: 1 });
 
-  const { getAdapter } = await import("@/lib/db/driver.js");
-  adapter = await getAdapter();
+  const { getLogsAdapter } = await import("@/lib/db/driver.js");
+  adapter = await getLogsAdapter();
 });
 
 afterAll(() => {
+  try { global._dbAdapter?.instance?.close?.(); } catch {}
+  try { global._logsAdapter?.instance?.close?.(); } catch {}
+  delete global._dbAdapter;
+  delete global._logsAdapter;
   if (tempDir) fs.rmSync(tempDir, { recursive: true, force: true });
   if (originalDataDir === undefined) delete process.env.DATA_DIR;
   else process.env.DATA_DIR = originalDataDir;
@@ -129,7 +133,9 @@ describe("backupDbLite — excludes requestDetails, keeps critical data", () => 
     await saveDetail({ id: "bk-1", provider: "openai", model: "m", status: "ok", tokens: {}, request: {}, response: {} });
 
     const backupDir = fs.mkdtempSync(path.join(os.tmpdir(), "9router-bklite-"));
-    const dest = backupDbLite(adapter, backupDir);
+    const { getAdapter } = await import("@/lib/db/driver.js");
+    const mainAdapter = await getAdapter();
+    const dest = backupDbLite(mainAdapter, backupDir);
     expect(fs.existsSync(dest)).toBe(true);
 
     // Open backup and assert requestDetails is empty, settings present

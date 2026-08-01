@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { LEGACY_FILES, DB_DIR } from "./paths.js";
-import { TABLES, buildCreateTableSql, SCHEMA_VERSION } from "./schema.js";
+import { TABLES, LOGS_TABLES, buildCreateTableSql, SCHEMA_VERSION } from "./schema.js";
 import { MIGRATIONS, latestVersion } from "./migrations/index.js";
 import { getMetaSync, setMetaSync } from "./helpers/metaStore.js";
 import { makeBackupDir, backupFile, backupDbLite, pruneOldBackups } from "./backup.js";
@@ -294,4 +294,44 @@ export async function runMigrationOnce(adapter) {
   const newVer = getAppVersion();
   const oldVer = getMetaSync(adapter, "appVersion", null);
   if (oldVer !== newVer) setMetaSync(adapter, "appVersion", newVer);
+}
+
+export async function runLogsMigrationOnce(adapter) {
+  // Bootstrap _meta
+  adapter.exec(buildCreateTableSql("_meta", LOGS_TABLES._meta));
+
+  // Sync tables
+  for (const [tableName, def] of Object.entries(LOGS_TABLES)) {
+    adapter.exec(buildCreateTableSql(tableName, def));
+    for (const idx of def.indexes || []) {
+      try { adapter.exec(idx); } catch {}
+    }
+  }
+
+  // Import legacy JSON if fresh and not already done
+  const fresh = isFreshLogsDb(adapter);
+  const alreadyImported = fs.existsSync(MIGRATED_MARKER);
+  const legacyUsage = readJsonSafe(LEGACY_FILES.usage);
+  const legacyDetails = readJsonSafe(LEGACY_FILES.details);
+  const hasLegacy = !!(legacyUsage || legacyDetails);
+
+  if (fresh && hasLegacy && !alreadyImported) {
+    try {
+      adapter.transaction(() => {
+        importLegacyUsage(adapter, legacyUsage);
+        importLegacyDetails(adapter, legacyDetails);
+      });
+    } catch (err) {
+      console.error("[DB][migrate] Logs JSON import failed:", err);
+    }
+  }
+}
+
+function isFreshLogsDb(adapter) {
+  try {
+    const row = adapter.get(`SELECT COUNT(*) as c FROM usageHistory`);
+    return !row || row.c === 0;
+  } catch {
+    return true;
+  }
 }

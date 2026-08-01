@@ -1,7 +1,5 @@
 {
   "name": "9router",
   "description": "FREE AI Router & Token Saver",
-  "active_goals": [
-    "Separate audit logs & stats stack"
-  ]
+  "active_goals": []
 }

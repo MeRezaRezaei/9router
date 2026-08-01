@@ -1,5 +1,5 @@
 import { EventEmitter } from "events";
-import { getAdapter } from "../driver.js";
+import { getLogsAdapter } from "../driver.js";
 import { parseJson, stringifyJson } from "../helpers/jsonCol.js";
 import { getMeta, setMeta } from "../helpers/metaStore.js";
 
@@ -121,7 +121,7 @@ async function ensureRingInitialized() {
   if (recentRing.initialized) return;
   recentRing.initialized = true;
   try {
-    const db = await getAdapter();
+    const db = await getLogsAdapter();
     const rows = db.all(`SELECT timestamp, provider, model, connectionId, apiKey, endpoint, cost, status, tokens FROM usageHistory ORDER BY id DESC LIMIT ?`, [RING_CAP]);
     recentRing.items = rows.reverse().map((r) => ({
       timestamp: r.timestamp, provider: r.provider, model: r.model, connectionId: r.connectionId,
@@ -240,7 +240,7 @@ export async function getActiveRequests() {
 
 export async function saveRequestUsage(entry) {
   try {
-    const db = await getAdapter();
+    const db = await getLogsAdapter();
 
     if (!entry.timestamp) entry.timestamp = new Date().toISOString();
     else entry.timestamp = new Date(entry.timestamp).toISOString();
@@ -315,7 +315,7 @@ export async function saveRequestUsage(entry) {
 }
 
 export async function getUsageHistory(filter = {}) {
-  const db = await getAdapter();
+  const db = await getLogsAdapter();
   const conds = [];
   const params = [];
 
@@ -345,7 +345,7 @@ function loadDaysInRange(adapter, maxDays) {
 }
 
 export async function getUsageStats(period = "all") {
-  const db = await getAdapter();
+  const db = await getLogsAdapter();
 
   const [{ getProviderConnections }, { getApiKeys }, { getProviderNodes }] = await Promise.all([
     import("./connectionsRepo.js"),
@@ -660,7 +660,7 @@ export async function getUsageStats(period = "all") {
 }
 
 export async function getChartData(period = "7d") {
-  const db = await getAdapter();
+  const db = await getLogsAdapter();
   const now = Date.now();
 
   if (period === "today") {
@@ -742,7 +742,7 @@ export async function appendRequestLog() {}
 
 export async function getRecentLogs(limit = 200) {
   try {
-    const db = await getAdapter();
+    const db = await getLogsAdapter();
     const rows = db.all(
       `SELECT timestamp, provider, model, connectionId, promptTokens, completionTokens, status, tokens FROM usageHistory ORDER BY id DESC LIMIT ?`,
       [limit],
