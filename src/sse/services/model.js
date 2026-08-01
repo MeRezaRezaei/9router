@@ -1,5 +1,5 @@
 // Re-export from open-sse with localDb integration
-import { getModelAliases, getComboByName, getProviderNodes } from "@/lib/localDb";
+import { getModelAliases, getComboByName, getProviderNodes, getSettings } from "@/lib/localDb";
 import { parseModel as parseModelCore, resolveModelAliasFromMap, getModelInfoCore } from "open-sse/services/model.js";
 import REGISTRY from "open-sse/providers/registry/index.js";
 
@@ -33,9 +33,104 @@ export async function resolveModelAlias(alias) {
 }
 
 /**
+ * Resolve aggregated model to the best provider/model based on config, priorities or similarity mappings
+ */
+async function resolveAggregatedModel(modelStr) {
+  try {
+    const s = await getSettings();
+    if (s.modelAggregationEnabled !== true) return null;
+    
+    // modelStr is e.g. "aggregated/gpt-4o" or just "gpt-4o" if parsed as alias
+    const normalizedName = modelStr.replace(/^aggregated\//, "").toLowerCase().replace(/[^a-z0-9]/g, "");
+
+    // Look up the active connections, find providers that offer this normalized model name
+    const { getProviderConnections } = await import("@/lib/localDb");
+    const connections = (await getProviderConnections()).filter(c => c.isActive !== false);
+
+    // Simple matching of available model names under each provider
+    const { PROVIDER_MODELS, PROVIDER_ID_TO_ALIAS } = await import("@/shared/constants/models");
+    const { getProviderAlias } = await import("@/shared/constants/providers");
+    const { getMocData } = await import("@/lib/localDb");
+    const mocDataList = await getMocData();
+
+    const candidates = [];
+    const customMap = s.modelAggregationMap || {};
+
+    for (const conn of connections) {
+      const providerId = conn.provider;
+      const staticAlias = PROVIDER_ID_TO_ALIAS[providerId] || providerId;
+      const outputAlias = (
+        conn?.providerSpecificData?.prefix
+        || getProviderAlias(providerId)
+        || staticAlias
+      ).trim();
+
+      const dynamicMoc = mocDataList[providerId] || mocDataList[staticAlias];
+      const providerModels = dynamicMoc?.models?.length
+        ? dynamicMoc.models
+        : (PROVIDER_MODELS[staticAlias] || []);
+
+      for (const m of providerModels) {
+        const fullId = `${outputAlias}/${m.id}`;
+        
+        let norm = m.id.toLowerCase()
+          .replace(/^(google|openai|anthropic|meta|mistral|deepseek|cohere)\//, "")
+          .replace(/^(zen|or|ag|gc|kc|cl|bpm|cf|gh|cc|cx)\//, "")
+          .replace(/-(preview|latest|stable|v[0-9]|instruct|chat|online)$/g, "")
+          .replace(/[^a-z0-9]/g, "");
+
+        let targetNorm = normalizedName;
+
+        if (customMap[fullId]) {
+          norm = customMap[fullId].toLowerCase().replace(/[^a-z0-9]/g, "");
+        } else if (customMap[m.id]) {
+          norm = customMap[m.id].toLowerCase().replace(/[^a-z0-9]/g, "");
+        } else {
+          // Check if there is an inverse mapping in customMap (e.g. mapping "deepseek-chat" to "deepseek-v3")
+          // Let's support mapping original names/IDs to a canonical name.
+          for (const [orig, canonical] of Object.entries(customMap)) {
+            const origNorm = orig.toLowerCase().replace(/[^a-z0-9]/g, "");
+            const cleanId = m.id.replace(/^(google|openai|anthropic|meta|mistral|deepseek|cohere)\//, "");
+            if (origNorm === m.id.toLowerCase().replace(/[^a-z0-9]/g, "") || 
+                origNorm === cleanId.toLowerCase().replace(/[^a-z0-9]/g, "") ||
+                origNorm === fullId.toLowerCase().replace(/[^a-z0-9]/g, "")) {
+              norm = canonical.toLowerCase().replace(/[^a-z0-9]/g, "");
+              break;
+            }
+          }
+        }
+
+        if (norm === targetNorm) {
+          candidates.push({
+            provider: providerId,
+            model: m.id,
+            priority: conn.priority || 999,
+          });
+        }
+      }
+    }
+
+    if (candidates.length > 0) {
+      // Sort by connection priority (lowest first)
+      candidates.sort((a, b) => a.priority - b.priority);
+      return candidates[0];
+    }
+  } catch (e) {
+    console.error("Failed resolving aggregated model:", e);
+  }
+  return null;
+}
+
+/**
  * Get full model info (parse or resolve)
  */
 export async function getModelInfo(modelStr) {
+  // Check if it's an aggregated model first
+  if (modelStr.startsWith("aggregated/") || !modelStr.includes("/")) {
+    const resolvedAgg = await resolveAggregatedModel(modelStr);
+    if (resolvedAgg) return resolvedAgg;
+  }
+
   const parsed = parseModel(modelStr);
 
   if (!parsed.isAlias) {

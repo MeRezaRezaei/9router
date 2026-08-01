@@ -5,7 +5,7 @@ import {
   isAnthropicCompatibleProvider,
   isOpenAICompatibleProvider,
 } from "@/shared/constants/providers";
-import { getProviderConnections, getCombos, getCustomModels, getModelAliases, getMocData } from "@/lib/localDb";
+import { getProviderConnections, getCombos, getCustomModels, getModelAliases, getMocData, getSettings } from "@/lib/localDb";
 import { getDisabledModels } from "@/lib/disabledModelsDb";
 import { resolveKiroModels } from "open-sse/services/kiroModels.js";
 import { resolveKimchiModels } from "open-sse/services/kimchiModels.js";
@@ -525,10 +525,91 @@ export async function buildModelsList(kindFilter, options = {}) {
 
   const dedupedModels = [];
   const seenModelIds = new Set();
-  for (const model of models) {
-    if (!model?.id || seenModelIds.has(model.id)) continue;
-    seenModelIds.add(model.id);
-    dedupedModels.push(model);
+  
+  let aggregate = false;
+  let customMap = {};
+  try {
+    const s = await getSettings();
+    aggregate = s.modelAggregationEnabled === true;
+    customMap = s.modelAggregationMap || {};
+  } catch (e) {
+    console.log("Could not fetch settings for model aggregation:", e.message);
+  }
+
+  if (aggregate) {
+    const normalizedToCanonical = new Map(); // normalized -> canonical ID
+    const aggregates = new Map(); // canonical ID -> { id, object: "model", owned_by: "9router-aggregated", capabilities, providers: [] }
+
+    // First, pass through non-eligible models (combos, search, fetch)
+    for (const model of models) {
+      if (!model?.id) continue;
+      const parts = model.id.split("/");
+      if (parts.length < 2 || model.owned_by === "combo" || model.kind === "webSearch" || model.kind === "webFetch") {
+        if (!seenModelIds.has(model.id)) {
+          seenModelIds.add(model.id);
+          dedupedModels.push(model);
+        }
+        continue;
+      }
+      
+      const provider = parts[0];
+      const nameOnly = parts.slice(1).join("/");
+      
+      // Heuristic normalization: lowercase, strip prefixes/suffixes, remove non-alphanumeric/spaces
+      let norm = nameOnly.toLowerCase()
+        .replace(/^(google|openai|anthropic|meta|mistral|deepseek|cohere)\//, "")
+        .replace(/^(zen|or|ag|gc|kc|cl|bpm|cf|gh|cc|cx)\//, "")
+        .replace(/-(preview|latest|stable|v[0-9]|instruct|chat|online)$/g, "")
+        .replace(/[^a-z0-9]/g, "");
+
+      // Apply custom map overrides if configured
+      if (customMap[model.id]) {
+        norm = customMap[model.id].toLowerCase().replace(/[^a-z0-9]/g, "");
+      } else if (customMap[nameOnly]) {
+        norm = customMap[nameOnly].toLowerCase().replace(/[^a-z0-9]/g, "");
+      }
+
+      if (!normalizedToCanonical.has(norm)) {
+        // Find best canonical name representation: prefer cleanest non-prefixed or first encountered
+        normalizedToCanonical.set(norm, nameOnly);
+      }
+      const canonicalName = normalizedToCanonical.get(norm);
+      const canonicalId = `aggregated/${canonicalName}`;
+
+      if (!aggregates.has(canonicalId)) {
+        aggregates.set(canonicalId, {
+          id: canonicalId,
+          object: "model",
+          owned_by: "9router-aggregated",
+          capabilities: model.capabilities || {},
+          providers: [],
+        });
+      }
+      const agg = aggregates.get(canonicalId);
+      agg.providers.push({
+        provider,
+        originalId: model.id,
+        capabilities: model.capabilities || {},
+      });
+      // Merge capabilities (OR logic)
+      if (model.capabilities) {
+        agg.capabilities = { ...agg.capabilities, ...model.capabilities };
+      }
+    }
+
+    // Add aggregates to final list
+    for (const agg of aggregates.values()) {
+      if (!seenModelIds.has(agg.id)) {
+        seenModelIds.add(agg.id);
+        dedupedModels.push(agg);
+      }
+    }
+  } else {
+    for (const model of models) {
+      if (!model?.id || seenModelIds.has(model.id)) continue;
+      seenModelIds.add(model.id);
+      dedupedModels.push(model);
+    }
   }
 
   return dedupedModels;
