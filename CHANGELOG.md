@@ -13,6 +13,7 @@
 - **Usage**: SuperGrok weekly pool via gRPC-web
 
 ## Fixes
+- **Tests**: resolve failing suite runs (Windsurf endpoint mapping, daily usage concurrency timestamp overlaps, and Alicode cache control serialization checks).
 - **Refresh**: rotate `refresh_token` between retry attempts
 - **Kiro**: canonicalize tool history and route API keys correctly
 - **Kiro**: normalize dashboard thinking intensity models
