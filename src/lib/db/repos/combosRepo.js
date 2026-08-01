@@ -1,6 +1,7 @@
 import { v4 as uuidv4 } from "uuid";
 import { getAdapter } from "../driver.js";
 import { parseJson, stringifyJson } from "../helpers/jsonCol.js";
+import { redisGet, redisSet, redisClearPrefix } from "../../redis.js";
 
 function rowToCombo(row) {
   if (!row) return null;
@@ -15,21 +16,39 @@ function rowToCombo(row) {
 }
 
 export async function getCombos() {
+  const cacheKey = "9router:cache:combos:list";
+  const cached = await redisGet(cacheKey);
+  if (cached) return cached;
+
   const db = await getAdapter();
   const rows = db.all(`SELECT * FROM combos ORDER BY createdAt ASC`);
-  return rows.map(rowToCombo);
+  const list = rows.map(rowToCombo);
+  await redisSet(cacheKey, list, 300);
+  return list;
 }
 
 export async function getComboById(id) {
+  const cacheKey = `9router:cache:combos:id:${id}`;
+  const cached = await redisGet(cacheKey);
+  if (cached) return cached;
+
   const db = await getAdapter();
   const row = db.get(`SELECT * FROM combos WHERE id = ?`, [id]);
-  return rowToCombo(row);
+  const res = rowToCombo(row);
+  if (res) await redisSet(cacheKey, res, 300);
+  return res;
 }
 
 export async function getComboByName(name) {
+  const cacheKey = `9router:cache:combos:name:${name}`;
+  const cached = await redisGet(cacheKey);
+  if (cached) return cached;
+
   const db = await getAdapter();
   const row = db.get(`SELECT * FROM combos WHERE name = ?`, [name]);
-  return rowToCombo(row);
+  const res = rowToCombo(row);
+  if (res) await redisSet(cacheKey, res, 300);
+  return res;
 }
 
 export async function createCombo(data) {
@@ -47,6 +66,7 @@ export async function createCombo(data) {
     `INSERT INTO combos(id, name, kind, models, createdAt, updatedAt) VALUES(?, ?, ?, ?, ?, ?)`,
     [combo.id, combo.name, combo.kind, stringifyJson(combo.models), combo.createdAt, combo.updatedAt]
   );
+  await redisClearPrefix("9router:cache:combos:");
   return combo;
 }
 
@@ -63,11 +83,16 @@ export async function updateCombo(id, data) {
     );
     result = merged;
   });
+  await redisClearPrefix("9router:cache:combos:");
   return result;
 }
 
 export async function deleteCombo(id) {
   const db = await getAdapter();
   const res = db.run(`DELETE FROM combos WHERE id = ?`, [id]);
-  return (res?.changes ?? 0) > 0;
+  const ok = (res?.changes ?? 0) > 0;
+  if (ok) {
+    await redisClearPrefix("9router:cache:combos:");
+  }
+  return ok;
 }

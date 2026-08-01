@@ -1,5 +1,6 @@
 import { getAdapter } from "../driver.js";
 import { parseJson, stringifyJson } from "../helpers/jsonCol.js";
+import { redisGet, redisSet, redisClearPrefix } from "../../redis.js";
 
 const DEFAULT_MITM_ROUTER_BASE = "http://localhost:20128";
 const DEFAULT_HEADROOM_URL = process.env.HEADROOM_URL || "http://localhost:8787";
@@ -84,8 +85,14 @@ function mergeWithDefaults(raw) {
 }
 
 export async function getSettings() {
+  const cacheKey = "9router:cache:settings";
+  const cached = await redisGet(cacheKey);
+  if (cached) return cached;
+
   const raw = await readRaw();
-  return mergeWithDefaults(raw);
+  const res = mergeWithDefaults(raw);
+  await redisSet(cacheKey, res, 300);
+  return res;
 }
 
 // Atomic read-merge-write inside transaction (prevents losing concurrent updates)
@@ -101,6 +108,7 @@ export async function updateSettings(updates) {
       [stringifyJson(next)]
     );
   });
+  await redisClearPrefix("9router:cache:settings");
   return mergeWithDefaults(next);
 }
 

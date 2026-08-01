@@ -2,7 +2,6 @@
   "name": "9router",
   "description": "FREE AI Router & Token Saver",
   "active_goals": [
-    "Redis caching & Vault integration",
     "Separate audit logs & stats stack"
   ]
 }

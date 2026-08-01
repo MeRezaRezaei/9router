@@ -1,6 +1,23 @@
 import { v4 as uuidv4 } from "uuid";
 import { getAdapter } from "../driver.js";
 import { parseJson, stringifyJson } from "../helpers/jsonCol.js";
+import { redisGet, redisSet, redisClearPrefix } from "../../redis.js";
+import { vaultRead, vaultWrite, vaultDelete } from "../../vault.js";
+
+async function enrichSecrets(conn) {
+  if (!conn) return null;
+  const secrets = await vaultRead(conn.id);
+  if (secrets) {
+    Object.assign(conn, secrets);
+  }
+  return conn;
+}
+
+async function enrichSecretsList(list) {
+  if (!list || list.length === 0) return list;
+  await Promise.all(list.map(enrichSecrets));
+  return list;
+}
 
 const OPTIONAL_FIELDS = [
   "displayName", "email", "globalPriority", "defaultModel",
@@ -68,6 +85,10 @@ function deriveConnectionName(data, fallbackName) {
 }
 
 export async function getProviderConnections(filter = {}) {
+  const cacheKey = `9router:cache:connections:${JSON.stringify(filter)}`;
+  const cached = await redisGet(cacheKey);
+  if (cached) return cached;
+
   const db = await getAdapter();
   const where = [];
   const params = [];
@@ -77,13 +98,18 @@ export async function getProviderConnections(filter = {}) {
   const rows = db.all(sql, params);
   const list = rows.map(rowToConn);
   list.sort((a, b) => (a.priority || 999) - (b.priority || 999));
+
+  await enrichSecretsList(list);
+
+  await redisSet(cacheKey, list, 300);
   return list;
 }
 
 export async function getProviderConnectionById(id) {
   const db = await getAdapter();
   const row = db.get(`SELECT * FROM providerConnections WHERE id = ?`, [id]);
-  return rowToConn(row);
+  const conn = rowToConn(row);
+  return await enrichSecrets(conn);
 }
 
 // Internal sync reorder — must be called INSIDE a transaction
@@ -103,6 +129,7 @@ export async function createProviderConnection(data) {
   const db = await getAdapter();
   const now = new Date().toISOString();
   let result;
+  let secretsToWrite = null;
 
   db.transaction(() => {
     const all = db.all(`SELECT * FROM providerConnections WHERE provider = ?`, [data.provider]).map(rowToConn);
@@ -146,45 +173,64 @@ export async function createProviderConnection(data) {
     }
     // access_token: never dedup — user manages duplicates manually
 
+    let finalConn;
     if (existing) {
-      const merged = { ...existing, ...data, updatedAt: now };
-      upsert(db, merged);
-      result = merged;
-      return;
+      finalConn = { ...existing, ...data, updatedAt: now };
+    } else {
+      let connectionName = data.name || null;
+      if (!connectionName && (data.authType === "oauth" || data.authType === "access_token")) {
+        connectionName = deriveConnectionName(data, data.email || `Account ${all.length + 1}`);
+      }
+      let connectionPriority = data.priority;
+      if (!connectionPriority) {
+        connectionPriority = all.reduce((m, c) => Math.max(m, c.priority || 0), 0) + 1;
+      }
+
+      finalConn = {
+        id: uuidv4(),
+        provider: data.provider,
+        authType: data.authType || "oauth",
+        name: connectionName,
+        priority: connectionPriority,
+        isActive: data.isActive !== undefined ? data.isActive : true,
+        createdAt: now,
+        updatedAt: now,
+      };
+      for (const f of OPTIONAL_FIELDS) {
+        if (data[f] !== undefined && data[f] !== null) finalConn[f] = data[f];
+      }
+      if (data.providerSpecificData && Object.keys(data.providerSpecificData).length > 0) {
+        finalConn.providerSpecificData = data.providerSpecificData;
+      }
+      if (data.email !== undefined) finalConn.email = data.email;
     }
 
-    let connectionName = data.name || null;
-    if (!connectionName && (data.authType === "oauth" || data.authType === "access_token")) {
-      connectionName = deriveConnectionName(data, data.email || `Account ${all.length + 1}`);
-    }
-    let connectionPriority = data.priority;
-    if (!connectionPriority) {
-      connectionPriority = all.reduce((m, c) => Math.max(m, c.priority || 0), 0) + 1;
+    // Extract secrets if Vault is active
+    const secrets = {};
+    if (process.env.VAULT_ADDR && process.env.VAULT_TOKEN) {
+      for (const key of ["apiKey", "accessToken", "refreshToken", "idToken"]) {
+        if (finalConn[key] !== undefined) {
+          secrets[key] = finalConn[key];
+          delete finalConn[key];
+        }
+      }
+      secretsToWrite = secrets;
     }
 
-    const conn = {
-      id: uuidv4(),
-      provider: data.provider,
-      authType: data.authType || "oauth",
-      name: connectionName,
-      priority: connectionPriority,
-      isActive: data.isActive !== undefined ? data.isActive : true,
-      createdAt: now,
-      updatedAt: now,
-    };
-    for (const f of OPTIONAL_FIELDS) {
-      if (data[f] !== undefined && data[f] !== null) conn[f] = data[f];
-    }
-    if (data.providerSpecificData && Object.keys(data.providerSpecificData).length > 0) {
-      conn.providerSpecificData = data.providerSpecificData;
-    }
-    if (data.email !== undefined) conn.email = data.email;
-
-    upsert(db, conn);
-    reorderInTx(db, data.provider);
-    result = conn;
+    upsert(db, finalConn);
+    reorderInTx(db, finalConn.provider);
+    result = { ...finalConn, ...secrets };
   });
 
+  // Write secrets to Vault outside transaction
+  if (secretsToWrite && Object.keys(secretsToWrite).length > 0) {
+    await vaultWrite(result.id, secretsToWrite);
+  }
+
+  // Enrich result with complete secrets from Vault
+  await enrichSecrets(result);
+
+  await redisClearPrefix("9router:cache:connections:");
   return result;
 }
 
@@ -192,15 +238,46 @@ export async function createProviderConnection(data) {
 export async function updateProviderConnection(id, data) {
   const db = await getAdapter();
   let result;
+  let secretsToWrite = null;
+
   db.transaction(() => {
     const row = db.get(`SELECT * FROM providerConnections WHERE id = ?`, [id]);
     if (!row) { result = null; return; }
     const existing = rowToConn(row);
     const merged = { ...existing, ...data, updatedAt: new Date().toISOString() };
+
+    // Extract secrets from updates if Vault is active
+    if (process.env.VAULT_ADDR && process.env.VAULT_TOKEN) {
+      const secrets = {};
+      let hasSecrets = false;
+      for (const key of ["apiKey", "accessToken", "refreshToken", "idToken"]) {
+        if (data[key] !== undefined) {
+          secrets[key] = data[key];
+          hasSecrets = true;
+        }
+        delete merged[key];
+      }
+      if (hasSecrets) {
+        secretsToWrite = secrets;
+      }
+    }
+
     upsert(db, merged);
-    if (data.priority !== undefined) reorderInTx(db, existing.provider);
+    if (data.priority !== undefined) reorderInTx(db, merged.provider);
     result = merged;
   });
+
+  if (!result) return null;
+
+  // Write secrets to Vault outside transaction
+  if (secretsToWrite) {
+    await vaultWrite(id, secretsToWrite);
+  }
+
+  // Enrich result with complete secrets from Vault
+  await enrichSecrets(result);
+
+  await redisClearPrefix("9router:cache:connections:");
   return result;
 }
 
@@ -214,19 +291,29 @@ export async function deleteProviderConnection(id) {
     reorderInTx(db, row.provider);
     ok = true;
   });
+  if (ok) {
+    await vaultDelete(id);
+  }
+  await redisClearPrefix("9router:cache:connections:");
   return ok;
 }
 
 export async function deleteProviderConnectionsByProvider(providerId) {
   const db = await getAdapter();
-  const before = db.get(`SELECT COUNT(*) AS n FROM providerConnections WHERE provider = ?`, [providerId]);
+  const rows = db.all(`SELECT id FROM providerConnections WHERE provider = ?`, [providerId]);
+  const before = rows.length;
   db.run(`DELETE FROM providerConnections WHERE provider = ?`, [providerId]);
-  return before?.n || 0;
+  for (const row of rows) {
+    await vaultDelete(row.id);
+  }
+  await redisClearPrefix("9router:cache:connections:");
+  return before;
 }
 
 export async function reorderProviderConnections(providerId) {
   const db = await getAdapter();
   db.transaction(() => reorderInTx(db, providerId));
+  await redisClearPrefix("9router:cache:connections:");
 }
 
 export async function cleanupProviderConnections() {
@@ -239,23 +326,42 @@ export async function cleanupProviderConnections() {
     "consecutiveUseCount",
   ];
   let cleaned = 0;
-  db.transaction(() => {
-    const rows = db.all(`SELECT * FROM providerConnections`);
-    for (const row of rows) {
-      const conn = rowToConn(row);
-      let dirty = false;
-      for (const f of fieldsToCheck) {
-        if (conn[f] === null || conn[f] === undefined) {
-          if (f in conn) { delete conn[f]; cleaned++; dirty = true; }
+  
+  const rawRows = db.all(`SELECT * FROM providerConnections`);
+  const list = await enrichSecretsList(rawRows.map(rowToConn));
+
+  for (const conn of list) {
+    let dirty = false;
+    for (const f of fieldsToCheck) {
+      if (conn[f] === null || conn[f] === undefined) {
+        if (f in conn) { delete conn[f]; cleaned++; dirty = true; }
+      }
+    }
+    if (conn.providerSpecificData && Object.keys(conn.providerSpecificData).length === 0) {
+      delete conn.providerSpecificData;
+      cleaned++;
+      dirty = true;
+    }
+    if (dirty) {
+      const secrets = {};
+      const finalConn = { ...conn };
+      if (process.env.VAULT_ADDR && process.env.VAULT_TOKEN) {
+        for (const key of ["apiKey", "accessToken", "refreshToken", "idToken"]) {
+          if (finalConn[key] !== undefined) {
+            secrets[key] = finalConn[key];
+            delete finalConn[key];
+          }
         }
       }
-      if (conn.providerSpecificData && Object.keys(conn.providerSpecificData).length === 0) {
-        delete conn.providerSpecificData;
-        cleaned++;
-        dirty = true;
+      db.transaction(() => {
+        upsert(db, finalConn);
+      });
+      if (Object.keys(secrets).length > 0) {
+        await vaultWrite(conn.id, secrets);
       }
-      if (dirty) upsert(db, conn);
     }
-  });
+  }
+
+  await redisClearPrefix("9router:cache:connections:");
   return cleaned;
 }

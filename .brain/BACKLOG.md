@@ -13,6 +13,6 @@ Current active tasks.
 - [x] Implement MOC tests and separate local/remote request routing with MITM IP isolation (no main server 443 requests)
 - [x] Implement provider data auto-update & API collection endpoint for crowdsourced MOC updates
 - [x] Implement GitHub-based fast change detection & AI suggestion loop for data structure drift
-- [ ] Integrate Redis for configuration/route caching and speed optimization
-- [ ] Integrate Vault for secure provider credentials/data storage
+- [x] Integrate Redis for configuration/route caching and speed optimization
+- [x] Integrate Vault for secure provider credentials/data storage
 - [ ] Split off statistics stack and implement audit/trash logs database with enhanced logging

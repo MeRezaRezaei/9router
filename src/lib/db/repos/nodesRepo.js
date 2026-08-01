@@ -1,6 +1,7 @@
 import { v4 as uuidv4 } from "uuid";
 import { getAdapter } from "../driver.js";
 import { parseJson, stringifyJson } from "../helpers/jsonCol.js";
+import { redisGet, redisSet, redisClearPrefix } from "../../redis.js";
 
 function rowToNode(row) {
   if (!row) return null;
@@ -39,17 +40,29 @@ function upsert(db, n) {
 }
 
 export async function getProviderNodes(filter = {}) {
+  const cacheKey = `9router:cache:nodes:list:${JSON.stringify(filter)}`;
+  const cached = await redisGet(cacheKey);
+  if (cached) return cached;
+
   const db = await getAdapter();
   const where = [];
   const params = [];
   if (filter.type) { where.push("type = ?"); params.push(filter.type); }
   const sql = `SELECT * FROM providerNodes${where.length ? ` WHERE ${where.join(" AND ")}` : ""}`;
-  return db.all(sql, params).map(rowToNode);
+  const list = db.all(sql, params).map(rowToNode);
+  await redisSet(cacheKey, list, 300);
+  return list;
 }
 
 export async function getProviderNodeById(id) {
+  const cacheKey = `9router:cache:nodes:id:${id}`;
+  const cached = await redisGet(cacheKey);
+  if (cached) return cached;
+
   const db = await getAdapter();
-  return rowToNode(db.get(`SELECT * FROM providerNodes WHERE id = ?`, [id]));
+  const res = rowToNode(db.get(`SELECT * FROM providerNodes WHERE id = ?`, [id]));
+  if (res) await redisSet(cacheKey, res, 300);
+  return res;
 }
 
 export async function createProviderNode(data) {
@@ -66,6 +79,7 @@ export async function createProviderNode(data) {
     updatedAt: now,
   };
   upsert(db, node);
+  await redisClearPrefix("9router:cache:nodes:");
   return node;
 }
 
@@ -79,6 +93,7 @@ export async function updateProviderNode(id, data) {
     upsert(db, merged);
     result = merged;
   });
+  await redisClearPrefix("9router:cache:nodes:");
   return result;
 }
 
@@ -91,5 +106,6 @@ export async function deleteProviderNode(id) {
     removed = rowToNode(row);
     db.run(`DELETE FROM providerNodes WHERE id = ?`, [id]);
   });
+  await redisClearPrefix("9router:cache:nodes:");
   return removed;
 }
