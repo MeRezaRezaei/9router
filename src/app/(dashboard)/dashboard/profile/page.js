@@ -58,6 +58,8 @@ export default function ProfilePage() {
   const [proxyStatus, setProxyStatus] = useState({ type: "", message: "" });
   const [proxyLoading, setProxyLoading] = useState(false);
   const [proxyTestLoading, setProxyTestLoading] = useState(false);
+  const [mapText, setMapText] = useState("");
+  const [mapError, setMapError] = useState("");
 
   useEffect(() => {
     setLocale(getLocaleFromCookie());
@@ -68,6 +70,7 @@ export default function ProfilePage() {
       .then((res) => res.json())
       .then((data) => {
         setSettings(data);
+        setMapText(JSON.stringify(data?.modelAggregationMap || {}, null, 2));
         setOidcForm({
           authMode: data?.authMode || "password",
           oidcIssuerUrl: data?.oidcIssuerUrl || "",
@@ -293,6 +296,65 @@ export default function ProfilePage() {
       }
     } catch (err) {
       console.error("Failed to update combo sticky limit:", err);
+    }
+  };
+
+  const updateModelAggregationEnabled = async (enabled) => {
+    try {
+      const res = await fetch("/api/settings", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ modelAggregationEnabled: enabled }),
+      });
+      if (res.ok) {
+        setSettings(prev => ({ ...prev, modelAggregationEnabled: enabled }));
+      }
+    } catch (err) {
+      console.error("Failed to update model aggregation enabled:", err);
+    }
+  };
+
+  const [aggregationLoading, setAggregationLoading] = useState(false);
+  const [aggregationStatus, setAggregationStatus] = useState({ type: "", message: "" });
+
+  const runAggregationOptimizer = async () => {
+    setAggregationLoading(true);
+    setAggregationStatus({ type: "info", message: "Optimizing mappings via AI..." });
+    try {
+      const res = await fetch("/api/v1/models/aggregate", {
+        method: "POST",
+      });
+      const data = await res.json();
+      if (res.ok && data.success) {
+        setSettings(prev => ({ 
+          ...prev, 
+          modelAggregationEnabled: true,
+          modelAggregationMap: data.currentMap 
+        }));
+        setMapText(JSON.stringify(data.currentMap, null, 2));
+        setAggregationStatus({ type: "success", message: "Successfully optimized model aggregation mappings!" });
+      } else {
+        setAggregationStatus({ type: "error", message: data.error || "Failed to optimize mappings" });
+      }
+    } catch (err) {
+      setAggregationStatus({ type: "error", message: "Network error calling aggregation optimizer" });
+    } finally {
+      setAggregationLoading(false);
+    }
+  };
+
+  const updateModelAggregationMap = async (newMap) => {
+    try {
+      const res = await fetch("/api/settings", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ modelAggregationMap: newMap }),
+      });
+      if (res.ok) {
+        setSettings(prev => ({ ...prev, modelAggregationMap: newMap }));
+      }
+    } catch (err) {
+      console.error("Failed to update model aggregation map:", err);
     }
   };
 
@@ -1006,6 +1068,97 @@ export default function ProfilePage() {
                 ? ` Combos rotate after ${settings.comboStickyRoundRobinLimit || 1} call${(settings.comboStickyRoundRobinLimit || 1) === 1 ? "" : "s"} per model.`
                 : " Combos always start with their first model."}
             </p>
+          </div>
+        </Card>
+
+        {/* Model Aggregation */}
+        <Card>
+          <div className="flex items-center gap-3 mb-4">
+            <div className="p-2 rounded-lg bg-emerald-500/10 text-emerald-500 shrink-0">
+              <span className="material-symbols-outlined text-[20px]">layers</span>
+            </div>
+            <h3 className="text-base sm:text-lg font-semibold">Model Aggregation</h3>
+          </div>
+          <div className="flex flex-col gap-4">
+            <div className="flex items-start sm:items-center justify-between gap-4">
+              <div className="flex-1 min-w-0">
+                <p className="font-medium text-sm sm:text-base">Enable Aggregation</p>
+                <p className="text-xs sm:text-sm text-text-muted">
+                  Group identical models from different providers (e.g. Zen DeepSeek, OpenRouter DeepSeek) under a single consolidated model profile.
+                </p>
+              </div>
+              <Toggle
+                checked={settings.modelAggregationEnabled === true}
+                onChange={() => updateModelAggregationEnabled(!(settings.modelAggregationEnabled === true))}
+                disabled={loading}
+              />
+            </div>
+
+            {settings.modelAggregationEnabled === true && (
+              <div className="flex flex-col gap-4 pt-4 border-t border-border/50">
+                <div className="flex flex-col gap-2">
+                  <p className="font-medium text-sm sm:text-base">Mapping Configuration (JSON)</p>
+                  <textarea
+                    rows={6}
+                    value={mapText}
+                    onChange={(e) => {
+                      setMapText(e.target.value);
+                      try {
+                        JSON.parse(e.target.value);
+                        setMapError("");
+                      } catch (err) {
+                        setMapError(err.message);
+                      }
+                    }}
+                    placeholder='{ "zen/deepseek-chat": "deepseek-v3" }'
+                    className="w-full font-mono text-xs sm:text-sm p-3 rounded-lg border border-border bg-background focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary resize-y"
+                    disabled={loading || aggregationLoading}
+                  />
+                  {mapError && (
+                    <p className="text-xs text-red-500">Invalid JSON: {mapError}</p>
+                  )}
+                  <p className="text-xs text-text-muted">
+                    Mapping from the original provider-prefixed model ID (key) to the normalized canonical model name (value).
+                  </p>
+                </div>
+
+                <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
+                  <Button
+                    type="button"
+                    variant="primary"
+                    disabled={loading || aggregationLoading || !!mapError}
+                    onClick={() => {
+                      try {
+                        const parsed = JSON.parse(mapText);
+                        updateModelAggregationMap(parsed);
+                        setAggregationStatus({ type: "success", message: "Mappings saved successfully!" });
+                      } catch (err) {
+                        setAggregationStatus({ type: "error", message: "Invalid JSON format" });
+                      }
+                    }}
+                    className="w-full sm:w-auto"
+                  >
+                    Save Mappings
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    loading={aggregationLoading}
+                    disabled={loading}
+                    onClick={runAggregationOptimizer}
+                    className="w-full sm:w-auto"
+                  >
+                    AI Optimize Mappings
+                  </Button>
+                </div>
+              </div>
+            )}
+
+            {aggregationStatus.message && (
+              <p className={`text-xs sm:text-sm ${aggregationStatus.type === "error" ? "text-red-500" : aggregationStatus.type === "info" ? "text-blue-500" : "text-green-500"} pt-2 border-t border-border/50`}>
+                {aggregationStatus.message}
+              </p>
+            )}
           </div>
         </Card>
 
