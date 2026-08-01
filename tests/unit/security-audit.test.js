@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import fs from "fs";
 import path from "path";
+import os from "os";
 
 // ============================================================
 // AUDIT-002 (#1962): API key masking in usage stats
@@ -285,5 +286,106 @@ describe("AUDIT-001: Synchronous restart guard", () => {
 
     const afterMax = funcBody.substring(maxRestartsIdx, maxRestartsIdx + 200);
     expect(afterMax).toContain("mitmIsRestarting = false");
+  });
+});
+
+describe("Vault secrets storage and Redis write-through cache observer", () => {
+  let tempDir;
+  const originalDataDir = process.env.DATA_DIR;
+  const vaultStore = new Map();
+  const redisStore = new Map();
+
+  beforeEach(() => {
+    tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "9router-vault-tests-"));
+    process.env.DATA_DIR = tempDir;
+    process.env.VAULT_ADDR = "http://localhost:8200";
+    process.env.VAULT_TOKEN = "test-token";
+    delete global._dbAdapter;
+    vaultStore.clear();
+    redisStore.clear();
+
+    vi.doMock("../../src/lib/vault.js", () => ({
+      vaultRead: vi.fn(async (id) => vaultStore.get(id) || null),
+      vaultWrite: vi.fn(async (id, data) => { vaultStore.set(id, data); }),
+      vaultDelete: vi.fn(async (id) => { vaultStore.delete(id); }),
+    }));
+
+    vi.doMock("../../src/lib/redis.js", () => ({
+      redisGet: vi.fn(async (key) => redisStore.get(key) || null),
+      redisSet: vi.fn(async (key, val) => { redisStore.set(key, val); }),
+      redisDel: vi.fn(async (key) => { redisStore.delete(key); }),
+      redisClearPrefix: vi.fn(async (prefix) => {
+        for (const k of redisStore.keys()) {
+          if (k.startsWith(prefix)) redisStore.delete(k);
+        }
+      }),
+    }));
+  });
+
+  afterEach(() => {
+    try { global._dbAdapter?.instance?.close?.(); } catch {}
+    delete global._dbAdapter;
+    if (tempDir) fs.rmSync(tempDir, { recursive: true, force: true });
+    if (originalDataDir === undefined) delete process.env.DATA_DIR;
+    else process.env.DATA_DIR = originalDataDir;
+    delete process.env.VAULT_ADDR;
+    delete process.env.VAULT_TOKEN;
+    vi.doUnmock("../../src/lib/vault.js");
+    vi.doUnmock("../../src/lib/redis.js");
+  });
+
+  it("extracts sensitive fields to Vault and reads them back via Redis cache", async () => {
+    const { createProviderConnection, getProviderConnectionById, deleteProviderConnection } = await import("../../src/lib/db/repos/connectionsRepo.js");
+
+    // 1. Create a connection with sensitive fields
+    const conn = await createProviderConnection({
+      provider: "openai",
+      authType: "apikey",
+      name: "Test Vault Connection",
+      apiKey: "sk-sensitive-api-key-123456",
+      accessToken: "oauth-access-token",
+      refreshToken: "oauth-refresh-token",
+      idToken: "oauth-id-token",
+      isActive: true,
+    });
+
+    expect(conn.id).toBeDefined();
+    expect(conn.apiKey).toBe("sk-sensitive-api-key-123456");
+
+    // Check Vault storage
+    const storedInVault = vaultStore.get(conn.id);
+    expect(storedInVault).toBeDefined();
+    expect(storedInVault.apiKey).toBe("sk-sensitive-api-key-123456");
+    expect(storedInVault.accessToken).toBe("oauth-access-token");
+    expect(storedInVault.refreshToken).toBe("oauth-refresh-token");
+    expect(storedInVault.idToken).toBe("oauth-id-token");
+
+    // Check SQLite storage directly by reading from DB (it should NOT contain apiKey, etc.)
+    const { getAdapter } = await import("../../src/lib/db/driver.js");
+    const db = await getAdapter();
+    const row = db.get("SELECT data FROM providerConnections WHERE id = ?", [conn.id]);
+    const parsedData = JSON.parse(row.data);
+    expect(parsedData.apiKey).toBeUndefined();
+    expect(parsedData.accessToken).toBeUndefined();
+    expect(parsedData.refreshToken).toBeUndefined();
+    expect(parsedData.idToken).toBeUndefined();
+
+    // 2. Read back using getProviderConnectionById (which should retrieve from Vault and cache in Redis)
+    redisStore.clear(); // Clear cache to force DB/Vault fetch
+    const fetched = await getProviderConnectionById(conn.id);
+    expect(fetched.apiKey).toBe("sk-sensitive-api-key-123456");
+
+    // Check Redis cache has the full enriched object (with secrets)
+    const cachedInRedis = redisStore.get(`9router:cache:connection:${conn.id}`);
+    expect(cachedInRedis).toBeDefined();
+    expect(cachedInRedis.apiKey).toBe("sk-sensitive-api-key-123456");
+
+    // 3. Delete connection - should delete from SQLite, Vault, and Redis
+    const deleted = await deleteProviderConnection(conn.id);
+    expect(deleted).toBe(true);
+    expect(vaultStore.has(conn.id)).toBe(false);
+    expect(redisStore.has(`9router:cache:connection:${conn.id}`)).toBe(false);
+    const checkRow = db.get("SELECT * FROM providerConnections WHERE id = ?", [conn.id]);
+    expect(checkRow).toBeUndefined();
   });
 });
