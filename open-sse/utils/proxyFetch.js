@@ -107,8 +107,22 @@ const MITM_BYPASS_HOSTS = [
   "codewhisperer.us-east-1.amazonaws.com",
   "api2.cursor.sh",
 ];
-const GOOGLE_DNS_SERVERS = ["8.8.8.8", "8.8.4.4"];
-const HTTPS_PORT = 443;
+function parseIpMap(envVal) {
+  const map = {};
+  if (!envVal) return map;
+  envVal.split(",").forEach(pair => {
+    const parts = pair.split(":");
+    if (parts.length === 2) {
+      map[parts[0].trim()] = parts[1].trim();
+    }
+  });
+  return map;
+}
+
+const GOOGLE_DNS_SERVERS = process.env.MITM_DNS_SERVERS
+  ? process.env.MITM_DNS_SERVERS.split(",")
+  : ["8.8.8.8", "8.8.4.4"];
+const HTTPS_PORT = parseInt(process.env.MITM_UPSTREAM_PORT || "443", 10);
 const HTTP_SUCCESS_MIN = 200;
 const HTTP_SUCCESS_MAX = 300;
 
@@ -121,6 +135,9 @@ function normalizeString(value) {
  * Resolve real IP using Google DNS (bypass system DNS)
  */
 async function resolveRealIP(hostname) {
+  const mapped = process.env.MITM_UPSTREAM_IP_MAP ? parseIpMap(process.env.MITM_UPSTREAM_IP_MAP) : null;
+  if (mapped && mapped[hostname]) return mapped[hostname];
+
   const cached = DNS_CACHE.get(hostname);
   if (cached && Date.now() < cached.expiry) return cached.ip;
 

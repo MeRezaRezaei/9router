@@ -5,7 +5,7 @@ import {
   isAnthropicCompatibleProvider,
   isOpenAICompatibleProvider,
 } from "@/shared/constants/providers";
-import { getProviderConnections, getCombos, getCustomModels, getModelAliases } from "@/lib/localDb";
+import { getProviderConnections, getCombos, getCustomModels, getModelAliases, getMocData } from "@/lib/localDb";
 import { getDisabledModels } from "@/lib/disabledModelsDb";
 import { resolveKiroModels } from "open-sse/services/kiroModels.js";
 import { resolveKimchiModels } from "open-sse/services/kimchiModels.js";
@@ -283,6 +283,13 @@ export async function buildModelsList(kindFilter, options = {}) {
   }
   const isDisabled = (alias, modelId) => Array.isArray(disabledByAlias[alias]) && disabledByAlias[alias].includes(modelId);
 
+  let mocDataList = {};
+  try {
+    mocDataList = await getMocData();
+  } catch (e) {
+    console.log("Could not fetch MOC data:", e.message);
+  }
+
   const activeConnectionByProvider = new Map();
   for (const conn of connections) {
     if (!activeConnectionByProvider.has(conn.provider)) {
@@ -311,9 +318,11 @@ export async function buildModelsList(kindFilter, options = {}) {
     const aliasToProviderId = Object.fromEntries(
       Object.entries(PROVIDER_ID_TO_ALIAS).map(([id, alias]) => [alias, id])
     );
-    for (const [alias, providerModels] of Object.entries(PROVIDER_MODELS)) {
+    for (const [alias, staticModels] of Object.entries(PROVIDER_MODELS)) {
       const providerId = aliasToProviderId[alias] || alias;
       if (!providerMatchesKinds(providerId, kindFilter)) continue;
+      const dynamicMoc = mocDataList[providerId] || mocDataList[alias];
+      const providerModels = dynamicMoc?.models?.length ? dynamicMoc.models : staticModels;
       for (const model of providerModels) {
         if (!kindFilter.includes(modelKind(model))) continue;
         if (isDisabled(alias, model.id)) continue;
@@ -351,7 +360,10 @@ export async function buildModelsList(kindFilter, options = {}) {
         || getProviderAlias(providerId)
         || staticAlias
       ).trim();
-      const providerModels = PROVIDER_MODELS[staticAlias] || [];
+      const dynamicMoc = mocDataList[providerId] || mocDataList[staticAlias];
+      const providerModels = dynamicMoc?.models?.length
+        ? dynamicMoc.models
+        : (PROVIDER_MODELS[staticAlias] || []);
       const enabledModels = conn?.providerSpecificData?.enabledModels;
       const hasExplicitEnabledModels =
         Array.isArray(enabledModels) && enabledModels.length > 0;
@@ -481,7 +493,9 @@ export async function buildModelsList(kindFilter, options = {}) {
         // { id, name } — no per-model capability data. Fall back to the same
         // pattern-matched capabilities the dashboard uses (useModelCaps.js) so
         // dynamically-discovered LLM models still surface vision/reasoning/search/tools.
+        const dynamicCaps = dynamicMoc?.capabilities?.[modelId];
         const caps = liveCapabilitiesById.get(modelId)
+          || dynamicCaps
           || capabilitiesFromServiceKind(customKind || liveKind)
           || (kind === LLM_KIND ? getCapabilitiesForModel(providerId, modelId) : null);
         if (caps) model.capabilities = caps;

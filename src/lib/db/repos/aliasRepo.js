@@ -60,3 +60,17 @@ export async function getMitmAlias(toolName) {
 export async function setMitmAliasAll(toolName, mappings) {
   await mitmKv.set(toolName, mappings || {});
 }
+
+// mocData: key=provider, value=metadata object
+const mocKv = makeKv("mocData");
+
+export async function getMocData(provider = null) {
+  if (provider) {
+    return await mocKv.get(provider);
+  }
+  return await mocKv.getAll();
+}
+
+export async function setMocData(provider, data) {
+  await mocKv.set(provider, data);
+}

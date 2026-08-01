@@ -73,14 +73,34 @@ try {
 
 // ── Helpers ───────────────────────────────────────────────────
 
+function parseIpMap(envVal) {
+  const map = {};
+  if (!envVal) return map;
+  envVal.split(",").forEach(pair => {
+    const parts = pair.split(":");
+    if (parts.length === 2) {
+      map[parts[0].trim()] = parts[1].trim();
+    }
+  });
+  return map;
+}
+
+const UPSTREAM_PORT = parseInt(process.env.MITM_UPSTREAM_PORT || "443", 10);
+const DNS_SERVERS = process.env.MITM_DNS_SERVERS
+  ? process.env.MITM_DNS_SERVERS.split(",")
+  : ["8.8.8.8"];
+
 const cachedTargetIPs = {};
 const CACHE_TTL_MS = 5 * 60 * 1000;
 
 async function resolveTargetIP(hostname) {
+  const mapped = process.env.MITM_UPSTREAM_IP_MAP ? parseIpMap(process.env.MITM_UPSTREAM_IP_MAP) : null;
+  if (mapped && mapped[hostname]) return mapped[hostname];
+
   const cached = cachedTargetIPs[hostname];
   if (cached && Date.now() - cached.ts < CACHE_TTL_MS) return cached.ip;
   const resolver = new dns.Resolver();
-  resolver.setServers(["8.8.8.8"]);
+  resolver.setServers(DNS_SERVERS);
   const resolve4 = promisify(resolver.resolve4.bind(resolver));
   const addresses = await resolve4(hostname);
   cachedTargetIPs[hostname] = { ip: addresses[0], ts: Date.now() };
@@ -160,7 +180,7 @@ async function negotiateAlpn(host) {
   const ip = await resolveTargetIP(host);
   return new Promise((resolve, reject) => {
     const socket = tls.connect({
-      host: ip, port: 443, servername: host,
+      host: ip, port: UPSTREAM_PORT, servername: host,
       ALPNProtocols: ["h2", "http/1.1"], rejectUnauthorized: false,
     }, () => {
       const proto = socket.alpnProtocol || "http/1.1";
@@ -193,7 +213,7 @@ async function passthroughHttp2(req, res, bodyBuffer, headers, targetHost, onRes
   return new Promise((resolve) => {
     const client = http2.connect(`https://${targetHost}`, {
       createConnection: () => tls.connect({
-        host: targetIP, port: 443, servername: targetHost,
+        host: targetIP, port: UPSTREAM_PORT, servername: targetHost,
         ALPNProtocols: ["h2"], rejectUnauthorized: false,
       }),
     });
@@ -251,7 +271,7 @@ async function passthroughHttps(req, res, bodyBuffer, headers, targetHost, onRes
   const targetIP = await resolveTargetIP(targetHost);
   const forwardReq = https.request({
     hostname: targetIP,
-    port: 443,
+    port: UPSTREAM_PORT,
     path: req.url,
     method: req.method,
     headers,
@@ -380,7 +400,8 @@ try {
   process.exit(1);
 }
 
-server.listen(LOCAL_PORT, () => log(`🚀 Server ready on :${LOCAL_PORT}`));
+const BIND_IP = process.env.MITM_BIND_IP || "0.0.0.0";
+server.listen(LOCAL_PORT, BIND_IP, () => log(`🚀 Server ready on ${BIND_IP}:${LOCAL_PORT}`));
 
 server.on("error", (e) => {
   if (e.code === "EADDRINUSE") err(`Port ${LOCAL_PORT} already in use`);

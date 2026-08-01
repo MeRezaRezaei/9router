@@ -9,3 +9,10 @@ Current active tasks.
   - [x] Fix logic in `tests/unit/translator-request-normalization.test.js` (array vs string content formatting)
   - [x] Fix Cursor state database mock in `tests/unit/oauth-cursor-auto-import.test.js`
   - [x] Fix time-out and assertion in `tests/unit/kiro-terminal-integrity.test.js` and `tests/unit/mimo-free.live.test.js`
+- [x] Maintain and ensure full MOC Data Index coverage for all providers - verified registry, configs, and fixtures, keeping the MOC index up to date.
+- [x] Implement MOC tests and separate local/remote request routing with MITM IP isolation (no main server 443 requests)
+- [x] Implement provider data auto-update & API collection endpoint for crowdsourced MOC updates
+- [x] Implement GitHub-based fast change detection & AI suggestion loop for data structure drift
+- [ ] Integrate Redis for configuration/route caching and speed optimization
+- [ ] Integrate Vault for secure provider credentials/data storage
+- [ ] Split off statistics stack and implement audit/trash logs database with enhanced logging
