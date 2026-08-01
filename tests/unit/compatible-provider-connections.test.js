@@ -166,4 +166,33 @@ describe("compatible provider connections API", () => {
     expectCompatibleConnection(storedConnections[0], ctx.node, { apiType: "chat" });
     expectCompatibleConnection(storedConnections[1], ctx.node, { apiType: "chat" });
   });
+
+  it("allows connection insertion for free/no-auth providers without an API key", async () => {
+    const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "9router-free-provider-"));
+    process.env.DATA_DIR = tempDir;
+    vi.resetModules();
+    const { POST } = await import("@/app/api/providers/route.js");
+    const { getProviderConnections } = await import("@/models/index.js");
+
+    const req = new Request("https://9router.local/api/providers", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        provider: "mimo-free",
+        name: "My Free Provider",
+      }),
+    });
+
+    const response = await POST(req);
+    const body = await response.json();
+    expect(response.status).toBe(201);
+    expect(body.connection).toBeDefined();
+    expect(body.connection.provider).toBe("mimo-free");
+
+    const stored = await getProviderConnections({ provider: "mimo-free" });
+    expect(stored).toHaveLength(1);
+    expect(stored[0].name).toBe("My Free Provider");
+
+    fs.rmSync(tempDir, { recursive: true, force: true });
+  });
 });
