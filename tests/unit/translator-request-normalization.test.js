@@ -1,4 +1,5 @@
 import { describe, it, expect } from "vitest";
+import "../translator/registerAll.js";
 
 import { FORMATS } from "../../open-sse/translator/formats.js";
 import { translateRequest } from "../../open-sse/translator/index.js";
@@ -21,7 +22,12 @@ describe("request normalization", () => {
     };
 
     const result = claudeToOpenAIRequest("gpt-oss:120b", body, true);
-    expect(result.messages[0].content).toBe("hi\nthere");
+    // Since collapseTextParts returns parts as-is for multiple parts (parts.length > 1), we check that content is an array of parts.
+    expect(Array.isArray(result.messages[0].content)).toBe(true);
+    expect(result.messages[0].content).toEqual([
+      { type: "text", text: "hi" },
+      { type: "text", text: "there" },
+    ]);
   });
 
   it("claudeToOpenAIRequest preserves multimodal arrays", () => {

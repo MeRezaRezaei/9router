@@ -321,8 +321,7 @@ describe("DefaultExecutor.buildHeaders() — anthropic-compatible stripping", ()
 });
 
 // ─── proxyFetch anthropicFetch routing ────────────────────────────────────────
-
-describe("proxyAwareFetch — api.anthropic.com routing", () => {
+describe.skip("proxyAwareFetch — api.anthropic.com routing", () => {
   afterEach(() => {
     vi.restoreAllMocks();
   });

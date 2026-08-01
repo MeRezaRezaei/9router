@@ -327,10 +327,10 @@ exports[`GOLDEN buildHeaders (default executor providers) > cline → headers (a
     "Authorization": "Bearer <TOK>",
     "Content-Type": "application/json",
     "HTTP-Referer": "https://cline.bot",
-    "User-Agent": "9Router/0.5.40",
+    "User-Agent": "9Router/0.5.45",
     "X-CLIENT-TYPE": "9router",
-    "X-CLIENT-VERSION": "0.5.40",
-    "X-CORE-VERSION": "0.5.40",
+    "X-CLIENT-VERSION": "0.5.45",
+    "X-CORE-VERSION": "0.5.45",
     "X-IS-MULTIROOT": "false",
     "X-PLATFORM": "linux",
     "X-PLATFORM-VERSION": "v24.18.0",
@@ -340,10 +340,10 @@ exports[`GOLDEN buildHeaders (default executor providers) > cline → headers (a
     "Authorization": "Bearer <TOK>",
     "Content-Type": "application/json",
     "HTTP-Referer": "https://cline.bot",
-    "User-Agent": "9Router/0.5.40",
+    "User-Agent": "9Router/0.5.45",
     "X-CLIENT-TYPE": "9router",
-    "X-CLIENT-VERSION": "0.5.40",
-    "X-CORE-VERSION": "0.5.40",
+    "X-CLIENT-VERSION": "0.5.45",
+    "X-CORE-VERSION": "0.5.45",
     "X-IS-MULTIROOT": "false",
     "X-PLATFORM": "linux",
     "X-PLATFORM-VERSION": "v24.18.0",
@@ -354,10 +354,10 @@ exports[`GOLDEN buildHeaders (default executor providers) > cline → headers (a
     "Authorization": "Bearer <TOK>",
     "Content-Type": "application/json",
     "HTTP-Referer": "https://cline.bot",
-    "User-Agent": "9Router/0.5.40",
+    "User-Agent": "9Router/0.5.45",
     "X-CLIENT-TYPE": "9router",
-    "X-CLIENT-VERSION": "0.5.40",
-    "X-CORE-VERSION": "0.5.40",
+    "X-CLIENT-VERSION": "0.5.45",
+    "X-CORE-VERSION": "0.5.45",
     "X-IS-MULTIROOT": "false",
     "X-PLATFORM": "linux",
     "X-PLATFORM-VERSION": "v24.18.0",
@@ -373,10 +373,10 @@ exports[`GOLDEN buildHeaders (default executor providers) > clinepass → header
     "Authorization": "Bearer <TOK>",
     "Content-Type": "application/json",
     "HTTP-Referer": "https://cline.bot",
-    "User-Agent": "9Router/0.5.40",
+    "User-Agent": "9Router/0.5.45",
     "X-CLIENT-TYPE": "9router",
-    "X-CLIENT-VERSION": "0.5.40",
-    "X-CORE-VERSION": "0.5.40",
+    "X-CLIENT-VERSION": "0.5.45",
+    "X-CORE-VERSION": "0.5.45",
     "X-IS-MULTIROOT": "false",
     "X-PLATFORM": "linux",
     "X-PLATFORM-VERSION": "v24.18.0",
@@ -386,10 +386,10 @@ exports[`GOLDEN buildHeaders (default executor providers) > clinepass → header
     "Authorization": "Bearer <TOK>",
     "Content-Type": "application/json",
     "HTTP-Referer": "https://cline.bot",
-    "User-Agent": "9Router/0.5.40",
+    "User-Agent": "9Router/0.5.45",
     "X-CLIENT-TYPE": "9router",
-    "X-CLIENT-VERSION": "0.5.40",
-    "X-CORE-VERSION": "0.5.40",
+    "X-CLIENT-VERSION": "0.5.45",
+    "X-CORE-VERSION": "0.5.45",
     "X-IS-MULTIROOT": "false",
     "X-PLATFORM": "linux",
     "X-PLATFORM-VERSION": "v24.18.0",
@@ -400,10 +400,10 @@ exports[`GOLDEN buildHeaders (default executor providers) > clinepass → header
     "Authorization": "Bearer <TOK>",
     "Content-Type": "application/json",
     "HTTP-Referer": "https://cline.bot",
-    "User-Agent": "9Router/0.5.40",
+    "User-Agent": "9Router/0.5.45",
     "X-CLIENT-TYPE": "9router",
-    "X-CLIENT-VERSION": "0.5.40",
-    "X-CORE-VERSION": "0.5.40",
+    "X-CLIENT-VERSION": "0.5.45",
+    "X-CORE-VERSION": "0.5.45",
     "X-IS-MULTIROOT": "false",
     "X-PLATFORM": "linux",
     "X-PLATFORM-VERSION": "v24.18.0",
@@ -544,6 +544,25 @@ exports[`GOLDEN buildHeaders (default executor providers) > deepgram → headers
 `;
 
 exports[`GOLDEN buildHeaders (default executor providers) > deepseek → headers (apiKey / oauth) 1`] = `
+{
+  "apiKey": {
+    "Accept": "text/event-stream",
+    "Authorization": "Bearer <TOK>",
+    "Content-Type": "application/json",
+  },
+  "nonStream": {
+    "Authorization": "Bearer <TOK>",
+    "Content-Type": "application/json",
+  },
+  "oauth": {
+    "Accept": "text/event-stream",
+    "Authorization": "Bearer <TOK>",
+    "Content-Type": "application/json",
+  },
+}
+`;
+
+exports[`GOLDEN buildHeaders (default executor providers) > devin-cli → headers (apiKey / oauth) 1`] = `
 {
   "apiKey": {
     "Accept": "text/event-stream",
@@ -819,7 +838,7 @@ exports[`GOLDEN buildHeaders (default executor providers) > kimi → headers (ap
     "X-Msh-Device-Model": "Linux x64",
     "X-Msh-Device-Name": "pubgsell",
     "X-Msh-Platform": "9router",
-    "X-Msh-Version": "0.5.40",
+    "X-Msh-Version": "0.5.45",
     "x-api-key": "<CRED>",
   },
   "nonStream": {
@@ -830,7 +849,7 @@ exports[`GOLDEN buildHeaders (default executor providers) > kimi → headers (ap
     "X-Msh-Device-Model": "Linux x64",
     "X-Msh-Device-Name": "pubgsell",
     "X-Msh-Platform": "9router",
-    "X-Msh-Version": "0.5.40",
+    "X-Msh-Version": "0.5.45",
     "x-api-key": "<CRED>",
   },
   "oauth": {
@@ -842,7 +861,7 @@ exports[`GOLDEN buildHeaders (default executor providers) > kimi → headers (ap
     "X-Msh-Device-Model": "Linux x64",
     "X-Msh-Device-Name": "pubgsell",
     "X-Msh-Platform": "9router",
-    "X-Msh-Version": "0.5.40",
+    "X-Msh-Version": "0.5.45",
     "x-api-key": "<CRED>",
   },
 }
@@ -1284,6 +1303,29 @@ exports[`GOLDEN buildHeaders (default executor providers) > volcengine-ark → h
 }
 `;
 
+exports[`GOLDEN buildHeaders (default executor providers) > windsurf → headers (apiKey / oauth) 1`] = `
+{
+  "apiKey": {
+    "Accept": "text/event-stream",
+    "Authorization": "<CRED>",
+    "Content-Type": "application/grpc-web+proto",
+    "X-Grpc-Web": "1",
+  },
+  "nonStream": {
+    "Accept": "application/grpc-web+proto",
+    "Authorization": "<CRED>",
+    "Content-Type": "application/grpc-web+proto",
+    "X-Grpc-Web": "1",
+  },
+  "oauth": {
+    "Accept": "text/event-stream",
+    "Authorization": "<CRED>",
+    "Content-Type": "application/grpc-web+proto",
+    "X-Grpc-Web": "1",
+  },
+}
+`;
+
 exports[`GOLDEN buildHeaders (default executor providers) > xai → headers (apiKey / oauth) 1`] = `
 {
   "apiKey": {
@@ -1495,6 +1537,13 @@ exports[`GOLDEN buildUrl (default executor providers) > deepseek → url (stream
 {
   "nonStream": "https://api.deepseek.com/chat/completions",
   "stream": "https://api.deepseek.com/chat/completions",
+}
+`;
+
+exports[`GOLDEN buildUrl (default executor providers) > devin-cli → url (stream + non-stream) 1`] = `
+{
+  "nonStream": "devin://acp/stdio",
+  "stream": "devin://acp/stdio",
 }
 `;
 
@@ -1740,6 +1789,13 @@ exports[`GOLDEN buildUrl (default executor providers) > volcengine-ark → url (
 {
   "nonStream": "https://ark.cn-beijing.volces.com/api/coding/v3/chat/completions",
   "stream": "https://ark.cn-beijing.volces.com/api/coding/v3/chat/completions",
+}
+`;
+
+exports[`GOLDEN buildUrl (default executor providers) > windsurf → url (stream + non-stream) 1`] = `
+{
+  "nonStream": "https://server.codeium.com/exa.language_server_pb.LanguageServerService/GetChatMessage",
+  "stream": "https://server.codeium.com/exa.language_server_pb.LanguageServerService/GetChatMessage",
 }
 `;
 

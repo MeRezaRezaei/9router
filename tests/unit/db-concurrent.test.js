@@ -27,11 +27,14 @@ describe("DB Concurrency — atomic safety", () => {
   it("100 parallel saveRequestUsage → no count loss", async () => {
     const N = 100;
     const promises = [];
+    const baseTime = Date.now();
     for (let i = 0; i < N; i++) {
+      const timestamp = new Date(baseTime + i).toISOString();
       promises.push(db.saveRequestUsage({
         provider: "openai", model: "gpt-4", connectionId: "c1",
         tokens: { prompt_tokens: 10, completion_tokens: 5 },
         endpoint: "/v1/chat", status: "ok",
+        timestamp,
       }));
     }
     await Promise.all(promises);
@@ -68,10 +71,13 @@ describe("DB Concurrency — atomic safety", () => {
 
   it("mixed concurrent: usage + details + connections + aliases", async () => {
     const ops = [];
+    const baseTime = Date.now();
     for (let i = 0; i < 50; i++) {
+      const timestamp = new Date(baseTime + i).toISOString();
       ops.push(db.saveRequestUsage({
         provider: "anthropic", model: `m-${i % 3}`, connectionId: "c2",
         tokens: { prompt_tokens: 20 }, status: "ok",
+        timestamp,
       }));
       ops.push(db.setModelAlias(`a-${i}`, `target-${i}`));
       ops.push(db.disableModels("openai", [`d-${i}`]));
@@ -152,11 +158,14 @@ describe("DB Concurrency — atomic safety", () => {
   it("daily summary aggregates correctly under parallel writes", async () => {
     const N = 50;
     const promises = [];
+    const baseTime = Date.now();
     for (let i = 0; i < N; i++) {
+      const timestamp = new Date(baseTime + i).toISOString();
       promises.push(db.saveRequestUsage({
         provider: "google", model: "gemini-pro", connectionId: "cG",
         tokens: { prompt_tokens: 100, completion_tokens: 50 },
         status: "ok",
+        timestamp,
       }));
     }
     await Promise.all(promises);
