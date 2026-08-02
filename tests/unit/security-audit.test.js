@@ -1,7 +1,11 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import fs from "fs";
 import path from "path";
 import os from "os";
+
+vi.mock("@/lib/dataDir.js", () => ({
+  DATA_DIR: "/tmp/fake-data-dir-audit",
+}));
 
 // ============================================================
 // AUDIT-002 (#1962): API key masking in usage stats
