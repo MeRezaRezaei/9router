@@ -10,6 +10,12 @@ vi.mock("../../src/lib/redis.js", () => ({
   redisClearPrefix: vi.fn(),
 }));
 
+// Mock vault
+vi.mock("../../src/lib/vault.js", () => ({
+  vaultRead: vi.fn(),
+  vaultWrite: vi.fn(),
+}));
+
 describe("settingsRepo", () => {
   let tempDir;
   let originalDataDir;
@@ -71,5 +77,29 @@ describe("settingsRepo", () => {
     const check = await settingsRepo.getSettings();
     expect(check.modelAggregationEnabled).toBe(true);
     expect(redisClearPrefix).toHaveBeenCalledWith("9router:cache:settings");
+  });
+
+  it("updateSettings and getSettings: handles vault secrets for oidcClientSecret", async () => {
+    const { vaultRead, vaultWrite } = await import("../../src/lib/vault.js");
+    process.env.VAULT_ADDR = "http://localhost:8200";
+    process.env.VAULT_TOKEN = "test-token";
+
+    vaultRead.mockResolvedValue({ oidcClientSecret: "super-secret-oidc-key" });
+
+    const updated = await settingsRepo.updateSettings({
+      oidcIssuerUrl: "https://auth.example.com",
+      oidcClientSecret: "super-secret-oidc-key",
+    });
+
+    expect(updated.oidcIssuerUrl).toBe("https://auth.example.com");
+    expect(updated.oidcClientSecret).toBe("super-secret-oidc-key");
+    expect(vaultWrite).toHaveBeenCalledWith("settings", { oidcClientSecret: "super-secret-oidc-key" });
+
+    // Verify stored row in database does NOT contain oidcClientSecret
+    const db = await getAdapter();
+    const row = db.get("SELECT data FROM settings WHERE id = 1");
+    const storedData = JSON.parse(row.data);
+    expect(storedData.oidcClientSecret).toBeUndefined();
+    expect(storedData.oidcIssuerUrl).toBe("https://auth.example.com");
   });
 });

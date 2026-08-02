@@ -1,6 +1,7 @@
 import { getAdapter } from "../driver.js";
 import { parseJson, stringifyJson } from "../helpers/jsonCol.js";
 import { redisGet, redisSet, redisClearPrefix } from "../../redis.js";
+import { vaultRead, vaultWrite } from "../../vault.js";
 
 const DEFAULT_MITM_ROUTER_BASE = "http://localhost:20129";
 const DEFAULT_HEADROOM_URL = process.env.HEADROOM_URL || "http://localhost:8787";
@@ -92,6 +93,14 @@ export async function getSettings() {
 
   const raw = await readRaw();
   const res = mergeWithDefaults(raw);
+  
+  if (process.env.VAULT_ADDR && process.env.VAULT_TOKEN) {
+    const secrets = await vaultRead("settings");
+    if (secrets) {
+      Object.assign(res, secrets);
+    }
+  }
+
   await redisSet(cacheKey, res, 300);
   return res;
 }
@@ -100,17 +109,44 @@ export async function getSettings() {
 export async function updateSettings(updates) {
   const db = await getAdapter();
   let next;
+  let secretsToWrite = null;
+
   db.transaction(() => {
     const row = db.get(`SELECT data FROM settings WHERE id = 1`);
     const current = row ? parseJson(row.data, {}) : {};
     next = { ...current, ...updates };
+
+    if (process.env.VAULT_ADDR && process.env.VAULT_TOKEN) {
+      const secrets = {};
+      let hasSecrets = false;
+      for (const key of ["oidcClientSecret"]) {
+        if (next[key] !== undefined) {
+          secrets[key] = next[key];
+          hasSecrets = true;
+          delete next[key];
+        }
+      }
+      if (hasSecrets) {
+        secretsToWrite = secrets;
+      }
+    }
+
     db.run(
       `INSERT INTO settings(id, data) VALUES(1, ?) ON CONFLICT(id) DO UPDATE SET data = excluded.data`,
       [stringifyJson(next)]
     );
   });
+
+  if (secretsToWrite) {
+    await vaultWrite("settings", secretsToWrite);
+  }
+
   await redisClearPrefix("9router:cache:settings");
-  return mergeWithDefaults(next);
+  const finalSettings = mergeWithDefaults(next);
+  if (secretsToWrite) {
+    Object.assign(finalSettings, secretsToWrite);
+  }
+  return finalSettings;
 }
 
 export async function isCloudEnabled() {
