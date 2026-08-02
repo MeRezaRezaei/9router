@@ -21,3 +21,10 @@ Current active tasks.
 - [x] Enrich provider data structures (send/receive/offers) to support aggregation, and allow free providers key insertion without crashes
 - [x] Add an AI aggregation/mapping optimization button to the dashboard using an LLM to recommend groupings
 - [x] Verify outbound SOCKS proxy settings are properly cached and handled dynamically in Redis
+
+## Testing Backlog
+- [x] Add unit tests for Redis caching functionality (`src/lib/redis.js` and DB repository cached wrappers)
+- [ ] Add unit tests for Vault secure credentials storage (`src/lib/vault.js` and DB repository Vault integration)
+- [ ] Add unit tests for Logs and Stats DB separation (verifying correct SQLite file isolation and repo routing)
+- [ ] Add unit tests for auto-switch web_search capability detection (`open-sse/services/combo.js`)
+- [ ] Expand unit tests for model aggregation route/resolver edge cases (priority fallbacks, offline combos)
