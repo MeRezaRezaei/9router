@@ -6,21 +6,24 @@
 ## Core Vision
 1. **Mock Data (MOC) & Testing Isolation**:
    - Separate request routing for local vs remote.
-   - Run MITM proxy inside isolated IP to bypass main server 443 requests (which fail/are blocked in restricted environments).
-   - Maintain static/semi-static MOC files per provider for local testing and validation.
+   - Run MITM proxy inside isolated IP to bypass main server 443 requests.
+   - Maintain static/semi-static MOC files per provider for local testing.
 
 2. **Automated & Crowdsourced MOC Upkeeps**:
    - Auto-update provider models, pricing, and transport configurations.
-   - Expose endpoints to receive provider API schemas directly from active users to update local MOC files.
+   - Expose endpoints to receive provider API schemas directly from active users.
    - Fast change detection using GitHub update versions.
-   - If an unexpected API shape is detected, notify 9router server. An AI explorer analyzes the drift, suggests fixes, and the owner publishes a new schema version.
+   - AI explorer analyzes drift, suggests fixes, owner publishes schema version.
 
 3. **Infrastructure Hardenings**:
-   - **Redis Cache & Write-Through Observer**: Fast caching of dynamic routing configurations, provider connections, and settings. Real-time usage tracking/logs streaming via Redis. Observers invalidate or update Redis on any data modifications.
-   - **Vault & SQL Key-Value Security**: Sensitive data (apiKey, accessToken, refreshToken, idToken) is stored in Vault (KV engine). SQL database (`providerConnections` table) stores only the UUID metadata pointing to the Vault secrets. Data is loaded from SQL and enriched from Vault on demand, then cached in Redis for fast access.
-   - **Audit Logs / Stats Stack**: Separate database for audit/trash logs with enhanced logging, and isolated runtime stack for stats.
+   - **Redis Cache & Write-Through Observer**: Fast caching of configurations.
+   - **Vault & SQL Key-Value Security**: Sensitive credentials stored in Vault; SQLite DB points to Vault UUIDs.
+   - **Audit Logs / Stats Stack**: Separate database for audit/trash logs and isolated runtime stack for stats.
 
 4. **Aggregation, Normalization & AI Mapping**:
-   - **Model Aggregation**: Aggregates identical models offered by different providers (e.g. DeepSeek via OpenRouter, DeepSeek direct, and Zen DeepSeek) under a single consolidated model profile for the end user.
-   - **API Key & Provider Sync**: Fixes failures with free providers (which lack API keys in 9router but crash on sync) by allowing key insertion and enriching the data structures for send, receive, and offers.
-   - **AI-Powered Mapping Engine**: Adds a button to trigger an AI model to find and propose the best mapping/grouping for aggregated models that are not easily mapped by standard similarity heuristics.
+   - **Model Aggregation**: Aggregates identical models offered by different providers under a single profile.
+   - **API Key & Provider Sync**: Fixes failures with free providers by allowing key insertion.
+   - **AI-Powered Mapping Engine**: AI models propose best mapping/grouping for aggregated models.
+
+## Security & Operational Boundaries
+- **Memory Firewall Boundary**: Shared AI Memory stores ONLY methodology (procedures, mindsets, doctrines). Project-specific dynamic context (backlogs, decisions, events) must live inside this `.brain/` directory and version-controlled via git.

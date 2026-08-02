@@ -1,33 +1,17 @@
-# BACKLOG
+# Backlog
 
-Current active tasks.
+Interface: `Use the project brain and continue: <goal>`.
+Parent Reference: GOAL-001-01 (PITA Goal Selection).
 
-## Tasks
-- [x] Fix failing tests in vitest suite
-  - [x] Update snapshots matching new package version 0.5.45 in `tests/translator/golden-url-header.test.js` and `tests/translator/golden-request.test.js`
-  - [x] Fix imports/paths in `tests/unit/claude-header-forwarding.test.js`, `tests/unit/codex-reset-credits.test.js`, `tests/unit/compatible-provider-connections.test.js`, `tests/unit/db-driver-chain.test.js`, `tests/unit/db-migration-chain.test.js`, `tests/unit/kiro-external-idp.test.js`, `tests/unit/model-routing.test.js`, `tests/unit/model-test-routing.test.js`, `tests/unit/provider-test-models-routing.test.js`, `tests/unit/token-refresh-generic.test.js`, `tests/unit/tunnel-pid-ownership.test.js`, `tests/unit/xai-oauth-service.test.js` (missing `open-sse/*` or `@/*` aliases/paths)
-  - [x] Fix logic in `tests/unit/translator-request-normalization.test.js` (array vs string content formatting)
-  - [x] Fix Cursor state database mock in `tests/unit/oauth-cursor-auto-import.test.js`
-  - [x] Fix time-out and assertion in `tests/unit/kiro-terminal-integrity.test.js` and `tests/unit/mimo-free.live.test.js`
-- [x] Maintain and ensure full MOC Data Index coverage for all providers - verified registry, configs, and fixtures, keeping the MOC index up to date.
-- [x] Implement MOC tests and separate local/remote request routing with MITM IP isolation (no main server 443 requests)
-- [x] Implement provider data auto-update & API collection endpoint for crowdsourced MOC updates
-- [x] Implement GitHub-based fast change detection & AI suggestion loop for data structure drift
-- [x] Integrate Redis for configuration/route caching and speed optimization
-- [x] Integrate Vault for secure provider credentials/data storage
-- [x] Split off statistics stack and implement audit/trash logs database with enhanced logging
-- [x] Implement Vault-only sensitive fields storage (apiKey, accessToken, refreshToken, idToken) referencing UUIDs from SQLite DB (with Redis write-through cache observer)
-- [x] Implement provider model aggregation and de-duplication based on similarity matching (OpenRouter, DeepSeek direct, Zen DeepSeek)
-- [x] Enrich provider data structures (send/receive/offers) to support aggregation, and allow free providers key insertion without crashes
-- [x] Add an AI aggregation/mapping optimization button to the dashboard using an LLM to recommend groupings
-- [x] Verify outbound SOCKS proxy settings are properly cached and handled dynamically in Redis
+## Active
+| ID | Title | Status | Pain Factor | Description | Next Step |
+|---|---|---|---|---|---|
+| AB-001 | Initial Brain Setup | Done | Low | Scaffold project brain | Refactor to THE_PROTOCOL layout |
 
-## Testing Backlog
-- [x] Add unit tests for Redis caching functionality (`src/lib/redis.js` and DB repository cached wrappers)
-- [x] Add unit tests for Vault secure credentials storage (`src/lib/vault.js` and DB repository Vault integration)
-- [x] Add unit tests for Logs and Stats DB separation (verifying correct SQLite file isolation and repo routing)
-- [x] Add unit tests for auto-switch web_search capability detection (`open-sse/services/combo.js`)
-- [x] Expand unit tests for model aggregation route/resolver edge cases (priority fallbacks, offline combos)
-- [x] Add usageRepo behavior tests covering dedup, pricing cost calc (defaults + user override), daily aggregation, history window/masking, chart + recent-log reads (`tests/unit/usage-repo.test.js`)
-- [x] Add capability tests locking in gemini-budget/level reasoning for bare 2.0/2.x/3.x and generic `*gemini*` ids (`tests/unit/capabilities.test.js`)
-- [x] feat(capabilities): report reasoning + thinkingFormat for bare gemini-2 and gemini patterns (previously downgraded to text-only inference) — commit `be31c840`; full unit suite 1395 pass / 0 fail; baseline verifier no-regression ✅
+## Product Backlog (Unscheduled)
+| ID | Title | Status | Pain Factor | Description | Next Step |
+|---|---|---|---|---|---|
+| AB-044 | Fix failing tests in vitest suite | Done | High | Update test suite golden snapshots and fix unit test routing aliases/paths | Run test validations |
+| AB-045 | Maintain MOC data | Done | Med | Full MOC Data Index coverage and local/remote isolated routing | Keep MOC index updated |
+| AB-046 | Hardening Infrastructure | Done | High | Integrate Redis cache, Vault secret storage, and separate stats/audit DBs | Optimize runtime cache |
+| AB-047 | Model Aggregation & Normalization | Done | High | Group identical models, allow free provider key inserts, and add AI optimizer | Refine mapping engine |
