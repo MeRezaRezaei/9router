@@ -28,3 +28,6 @@ Current active tasks.
 - [x] Add unit tests for Logs and Stats DB separation (verifying correct SQLite file isolation and repo routing)
 - [x] Add unit tests for auto-switch web_search capability detection (`open-sse/services/combo.js`)
 - [x] Expand unit tests for model aggregation route/resolver edge cases (priority fallbacks, offline combos)
+- [x] Add usageRepo behavior tests covering dedup, pricing cost calc (defaults + user override), daily aggregation, history window/masking, chart + recent-log reads (`tests/unit/usage-repo.test.js`)
+- [x] Add capability tests locking in gemini-budget/level reasoning for bare 2.0/2.x/3.x and generic `*gemini*` ids (`tests/unit/capabilities.test.js`)
+- [x] feat(capabilities): report reasoning + thinkingFormat for bare gemini-2 and gemini patterns (previously downgraded to text-only inference) — commit `be31c840`; full unit suite 1395 pass / 0 fail; baseline verifier no-regression ✅
