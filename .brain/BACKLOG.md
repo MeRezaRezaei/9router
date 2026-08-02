@@ -24,7 +24,7 @@ Current active tasks.
 
 ## Testing Backlog
 - [x] Add unit tests for Redis caching functionality (`src/lib/redis.js` and DB repository cached wrappers)
-- [ ] Add unit tests for Vault secure credentials storage (`src/lib/vault.js` and DB repository Vault integration)
+- [x] Add unit tests for Vault secure credentials storage (`src/lib/vault.js` and DB repository Vault integration)
 - [ ] Add unit tests for Logs and Stats DB separation (verifying correct SQLite file isolation and repo routing)
 - [ ] Add unit tests for auto-switch web_search capability detection (`open-sse/services/combo.js`)
 - [ ] Expand unit tests for model aggregation route/resolver edge cases (priority fallbacks, offline combos)
