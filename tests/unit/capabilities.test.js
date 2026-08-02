@@ -55,4 +55,44 @@ describe("getCapabilitiesForModel", () => {
     expect(getCapabilitiesForModel("kiro", "gpt-5.6-luna-agentic")).toMatchObject(kiroGpt56Expected);
     expect(getCapabilitiesForModel("kiro", "gpt-5.6-sol-thinking-agentic")).toMatchObject(kiroGpt56Expected);
   });
+
+  it("reports bare Gemini 2/3 generation models with gemini-budget reasoning", () => {
+    const gemini2Expected = {
+      vision: true,
+      audioInput: true,
+      videoInput: true,
+      reasoning: true,
+      search: true,
+      thinkingFormat: "gemini-budget",
+      contextWindow: 1048576,
+      maxOutput: 65536,
+    };
+    const gemini3Expected = {
+      vision: true,
+      audioInput: true,
+      videoInput: true,
+      reasoning: true,
+      search: true,
+      thinkingFormat: "gemini-level",
+      contextWindow: 1048576,
+      maxOutput: 65536,
+    };
+
+    // "*gemini-2*" catch-all (not already matched by the more specific 2.5 pattern)
+    // models prefixed "gemini-2" but not "gemini-2.5"
+    expect(getCapabilitiesForModel("google", "gemini-2.0-flash")).toMatchObject(gemini2Expected);
+    expect(getCapabilitiesForModel("google", "gemini-2.0-flash-exp")).toMatchObject(gemini2Expected);
+    expect(getCapabilitiesForModel("google", "gemini-2.0-pro-preview")).toMatchObject(gemini2Expected);
+    expect(getCapabilitiesForModel("google", "gemini-2-flash-lite")).toMatchObject(gemini2Expected);
+
+    // "*gemini-3*" and the bare "*gemini*" pattern → gemini-level reasoning
+    expect(getCapabilitiesForModel("google", "gemini-3-nano-preview")).toMatchObject(gemini3Expected);
+    expect(getCapabilitiesForModel("google", "gemini-flash-latest")).toMatchObject({
+      vision: true,
+      reasoning: true,
+      search: true,
+      thinkingFormat: "gemini-budget",
+      contextWindow: 1048576,
+    });
+  });
 });
