@@ -163,7 +163,47 @@ describe("disabledModelsRepo", () => {
   });
 });
 
+describe("connectionsRepo", () => {
+  let connectionsRepo;
+  let nodesRepo;
+  beforeAll(async () => {
+    connectionsRepo = await import("@/lib/db/repos/connectionsRepo.js");
+    nodesRepo = await import("@/lib/db/repos/nodesRepo.js");
+  });
+
+  async function makeConn(provider, name) {
+    return connectionsRepo.createProviderConnection({
+      provider,
+      authType: "apikey",
+      name,
+      apiKey: `sk-${name}`,
+    });
+  }
+
+  it("getProviderConnections: provider + isActive filters, priority-asc sort", async () => {
+    const node = await nodesRepo.createProviderNode({ type: "relay", name: "pc" });
+    const a = await makeConn(node.id, "a");
+    const b = await makeConn(node.id, "b");
+    const c = await makeConn(node.id, "c");
+
+    const all = await connectionsRepo.getProviderConnections({ provider: node.id });
+    expect(all.map((x) => x.name)).toEqual(["a", "b", "c"]);
+    expect(all[0].priority).toBeLessThan(all[2].priority);
+
+    await connectionsRepo.updateProviderConnection(c.id, { isActive: false });
+    const active = await connectionsRepo.getProviderConnections({ provider: node.id, isActive: true });
+    expect(active.map((x) => x.name)).toEqual(["a", "b"]);
+
+    await connectionsRepo.updateProviderConnection(b.id, { priority: 0 });
+    const reordered = await connectionsRepo.getProviderConnections({ provider: node.id });
+    expect(reordered.map((x) => x.name)).toEqual(["b", "a", "c"]);
+    // priority change triggers reorder, which renormalizes 1..n
+    expect(reordered[0].priority).toBe(1);
+  });
+});
+
 describe("proxyPoolsRepo", () => {
+
   let pp;
   beforeAll(async () => {
     pp = await import("@/lib/db/repos/proxyPoolsRepo.js");
