@@ -102,4 +102,59 @@ describe("settingsRepo", () => {
     expect(storedData.oidcClientSecret).toBeUndefined();
     expect(storedData.oidcIssuerUrl).toBe("https://auth.example.com");
   });
+
+  it("updateSettings: migrates legacy plaintext oidcClientSecret from row into vault", async () => {
+    const { vaultWrite, vaultRead } = await import("../../src/lib/vault.js");
+    process.env.VAULT_ADDR = "http://localhost:8200";
+    process.env.VAULT_TOKEN = "test-token";
+
+    vaultRead.mockResolvedValue({ oidcClientSecret: "legacy-secret" });
+
+    // Seed a legacy row with plaintext secret
+    const db = await getAdapter();
+    db.run("INSERT INTO settings(id, data) VALUES(1, ?) ON CONFLICT(id) DO UPDATE SET data = excluded.data", [
+      JSON.stringify({ oidcClientSecret: "legacy-secret", rtkEnabled: true }),
+    ]);
+
+    const updated = await settingsRepo.updateSettings({ rtkEnabled: false });
+
+    expect(updated.rtkEnabled).toBe(false);
+    expect(vaultWrite).toHaveBeenCalledWith("settings", { oidcClientSecret: "legacy-secret" });
+
+    // Row must no longer contain the secret
+    const row = db.get("SELECT data FROM settings WHERE id = 1");
+    const storedData = JSON.parse(row.data);
+    expect(storedData.oidcClientSecret).toBeUndefined();
+
+    // And getSettings enriches from vault
+    const settings = await settingsRepo.getSettings();
+    expect(settings.oidcClientSecret).toBe("legacy-secret");
+  });
+
+  it("exportSettings: never leaks oidcClientSecret", async () => {
+    process.env.VAULT_ADDR = "http://localhost:8200";
+    process.env.VAULT_TOKEN = "test-token";
+
+    const updated = await settingsRepo.updateSettings({
+      oidcClientSecret: "secret-123",
+      modelAggregationEnabled: true,
+    });
+
+    expect(updated.oidcClientSecret).toBe("secret-123");
+
+    const exported = await settingsRepo.exportSettings();
+    expect(exported.modelAggregationEnabled).toBe(true);
+    expect(exported.oidcClientSecret).toBeUndefined();
+  });
+
+  it("isCloudEnabled and getCloudUrl: derive from merged settings", async () => {
+    const { redisGet } = await import("../../src/lib/redis.js");
+    redisGet.mockResolvedValue(null);
+
+    expect(await settingsRepo.isCloudEnabled()).toBe(false);
+
+    await settingsRepo.updateSettings({ cloudEnabled: true, cloudUrl: "https://cloud.example.com" });
+    expect(await settingsRepo.isCloudEnabled()).toBe(true);
+    expect(await settingsRepo.getCloudUrl()).toBe("https://cloud.example.com");
+  });
 });

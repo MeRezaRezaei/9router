@@ -67,6 +67,17 @@ async function readRaw() {
   return row ? parseJson(row.data, {}) : {};
 }
 
+let vaultWarningShown = false;
+function vaultActive() {
+  return !!(process.env.VAULT_ADDR && process.env.VAULT_TOKEN);
+}
+function warnVaultInactive() {
+  if (!vaultWarningShown) {
+    vaultWarningShown = true;
+    console.warn("[settingsRepo] VAULT_ADDR/VAULT_TOKEN not set — oidcClientSecret stored in SQLite plaintext. Configure Vault to store it securely.");
+  }
+}
+
 // Merge raw settings with defaults; backward-compat for missing keys
 function mergeWithDefaults(raw) {
   const merged = { ...DEFAULT_SETTINGS, ...(raw || {}) };
@@ -93,8 +104,8 @@ export async function getSettings() {
 
   const raw = await readRaw();
   const res = mergeWithDefaults(raw);
-  
-  if (process.env.VAULT_ADDR && process.env.VAULT_TOKEN) {
+
+  if (vaultActive()) {
     const secrets = await vaultRead("settings");
     if (secrets) {
       Object.assign(res, secrets);
@@ -116,19 +127,20 @@ export async function updateSettings(updates) {
     const current = row ? parseJson(row.data, {}) : {};
     next = { ...current, ...updates };
 
-    if (process.env.VAULT_ADDR && process.env.VAULT_TOKEN) {
+    if (vaultActive()) {
       const secrets = {};
       let hasSecrets = false;
-      for (const key of ["oidcClientSecret"]) {
-        if (next[key] !== undefined) {
-          secrets[key] = next[key];
-          hasSecrets = true;
-          delete next[key];
-        }
+      // Migrate legacy plaintext secret from the row AND pick up any new one
+      if (next.oidcClientSecret !== undefined) {
+        secrets.oidcClientSecret = next.oidcClientSecret;
+        hasSecrets = true;
       }
+      delete next.oidcClientSecret;
       if (hasSecrets) {
         secretsToWrite = secrets;
       }
+    } else if (next.oidcClientSecret !== undefined) {
+      warnVaultInactive();
     }
 
     db.run(
@@ -165,5 +177,8 @@ export async function getCloudUrl() {
 }
 
 export async function exportSettings() {
-  return await readRaw();
+  const raw = await readRaw();
+  // Never export credentials — they live in Vault, not the settings row
+  delete raw.oidcClientSecret;
+  return raw;
 }

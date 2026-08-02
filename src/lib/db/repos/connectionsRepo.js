@@ -27,6 +27,20 @@ const OPTIONAL_FIELDS = [
   "consecutiveUseCount", "idToken", "lastRefreshAt",
 ];
 
+const SECRET_FIELDS = ["apiKey", "accessToken", "refreshToken", "idToken"];
+
+let vaultWarningShown = false;
+function warnVaultInactive() {
+  if (!vaultWarningShown) {
+    vaultWarningShown = true;
+    console.warn("[connectionsRepo] VAULT_ADDR/VAULT_TOKEN not set — sensitive connection fields stored in SQLite plaintext. Configure Vault to store them securely.");
+  }
+}
+
+function vaultActive() {
+  return !!(process.env.VAULT_ADDR && process.env.VAULT_TOKEN);
+}
+
 function rowToConn(row) {
   if (!row) return null;
   const extra = parseJson(row.data, {});
@@ -215,14 +229,18 @@ export async function createProviderConnection(data) {
 
     // Extract secrets if Vault is active
     const secrets = {};
-    if (process.env.VAULT_ADDR && process.env.VAULT_TOKEN) {
-      for (const key of ["apiKey", "accessToken", "refreshToken", "idToken"]) {
+    if (vaultActive()) {
+      for (const key of SECRET_FIELDS) {
         if (finalConn[key] !== undefined) {
           secrets[key] = finalConn[key];
           delete finalConn[key];
         }
       }
       secretsToWrite = secrets;
+    } else {
+      for (const key of SECRET_FIELDS) {
+        if (finalConn[key] !== undefined) { warnVaultInactive(); break; }
+      }
     }
 
     upsert(db, finalConn);
@@ -259,10 +277,10 @@ export async function updateProviderConnection(id, data) {
     const merged = { ...existing, ...data, updatedAt: new Date().toISOString() };
 
     // Extract secrets from updates if Vault is active
-    if (process.env.VAULT_ADDR && process.env.VAULT_TOKEN) {
+    if (vaultActive()) {
       const secrets = {};
       let hasSecrets = false;
-      for (const key of ["apiKey", "accessToken", "refreshToken", "idToken"]) {
+      for (const key of SECRET_FIELDS) {
         if (data[key] !== undefined) {
           secrets[key] = data[key];
           hasSecrets = true;
@@ -271,6 +289,10 @@ export async function updateProviderConnection(id, data) {
       }
       if (hasSecrets) {
         secretsToWrite = secrets;
+      }
+    } else {
+      for (const key of SECRET_FIELDS) {
+        if (data[key] !== undefined) { warnVaultInactive(); break; }
       }
     }
 
@@ -322,6 +344,7 @@ export async function deleteProviderConnectionsByProvider(providerId) {
   db.run(`DELETE FROM providerConnections WHERE provider = ?`, [providerId]);
   for (const row of rows) {
     await vaultDelete(row.id);
+    await redisDel(`9router:cache:connection:${row.id}`);
   }
   await redisClearPrefix("9router:cache:connections:");
   return before;
@@ -330,6 +353,10 @@ export async function deleteProviderConnectionsByProvider(providerId) {
 export async function reorderProviderConnections(providerId) {
   const db = await getAdapter();
   db.transaction(() => reorderInTx(db, providerId));
+  const rows = db.all(`SELECT id FROM providerConnections WHERE provider = ?`, [providerId]);
+  for (const row of rows) {
+    await redisDel(`9router:cache:connection:${row.id}`);
+  }
   await redisClearPrefix("9router:cache:connections:");
 }
 
@@ -362,12 +389,16 @@ export async function cleanupProviderConnections() {
     if (dirty) {
       const secrets = {};
       const finalConn = { ...conn };
-      if (process.env.VAULT_ADDR && process.env.VAULT_TOKEN) {
-        for (const key of ["apiKey", "accessToken", "refreshToken", "idToken"]) {
+      if (vaultActive()) {
+        for (const key of SECRET_FIELDS) {
           if (finalConn[key] !== undefined) {
             secrets[key] = finalConn[key];
             delete finalConn[key];
           }
+        }
+      } else {
+        for (const key of SECRET_FIELDS) {
+          if (finalConn[key] !== undefined) { warnVaultInactive(); break; }
         }
       }
       db.transaction(() => {
@@ -376,6 +407,7 @@ export async function cleanupProviderConnections() {
       if (Object.keys(secrets).length > 0) {
         await vaultWrite(conn.id, secrets);
       }
+      await redisDel(`9router:cache:connection:${conn.id}`);
     }
   }
 

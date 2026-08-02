@@ -158,4 +158,55 @@ describe("connectionsRepo", () => {
     expect(redisDel).toHaveBeenCalledWith(`9router:cache:connection:${initial.id}`);
     expect(redisClearPrefix).toHaveBeenCalledWith("9router:cache:connections:");
   });
+
+  it("deleteProviderConnectionsByProvider: clears per-id cache keys for every deleted connection", async () => {
+    const { redisDel } = await import("../../src/lib/redis.js");
+    const { vaultDelete } = await import("../../src/lib/vault.js");
+
+    const a = await connectionsRepo.createProviderConnection({ provider: "anthropic", authType: "apikey", name: "A", apiKey: "k-a" });
+    const b = await connectionsRepo.createProviderConnection({ provider: "anthropic", authType: "apikey", name: "B", apiKey: "k-b" });
+
+    const before = await connectionsRepo.deleteProviderConnectionsByProvider("anthropic");
+
+    expect(before).toBe(2);
+    expect(vaultDelete).toHaveBeenCalledWith(a.id);
+    expect(vaultDelete).toHaveBeenCalledWith(b.id);
+    expect(redisDel).toHaveBeenCalledWith(`9router:cache:connection:${a.id}`);
+    expect(redisDel).toHaveBeenCalledWith(`9router:cache:connection:${b.id}`);
+
+    const db = await getAdapter();
+    const rows = db.all("SELECT * FROM providerConnections WHERE provider = ?", ["anthropic"]);
+    expect(rows).toHaveLength(0);
+  });
+
+  it("reorderProviderConnections: invalidates per-id cache keys after priority reorder", async () => {
+    const { redisDel } = await import("../../src/lib/redis.js");
+
+    await connectionsRepo.createProviderConnection({ provider: "anthropic", authType: "apikey", name: "A", apiKey: "k-a", priority: 2 });
+    await connectionsRepo.createProviderConnection({ provider: "anthropic", authType: "apikey", name: "B", apiKey: "k-b", priority: 1 });
+
+    redisDel.mockClear();
+    await connectionsRepo.reorderProviderConnections("anthropic");
+
+    const calls = redisDel.mock.calls.map(c => c[0]).filter(k => k.startsWith("9router:cache:connection:"));
+    expect(calls).toHaveLength(2);
+  });
+
+  it("cleanupProviderConnections: invalidates per-id cache key for cleaned connections", async () => {
+    const { redisDel } = await import("../../src/lib/redis.js");
+
+    const conn = await connectionsRepo.createProviderConnection({ provider: "openai", authType: "apikey", name: "C", apiKey: "k-c" });
+
+    const db = await getAdapter();
+    db.run("UPDATE providerConnections SET data = ? WHERE id = ?", [
+      JSON.stringify({ apiKey: null, displayName: null, empty: true }),
+      conn.id,
+    ]);
+
+    redisDel.mockClear();
+    const cleaned = await connectionsRepo.cleanupProviderConnections();
+
+    expect(cleaned).toBeGreaterThan(0);
+    expect(redisDel).toHaveBeenCalledWith(`9router:cache:connection:${conn.id}`);
+  });
 });
