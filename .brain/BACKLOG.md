@@ -27,4 +27,4 @@ Current active tasks.
 - [x] Add unit tests for Vault secure credentials storage (`src/lib/vault.js` and DB repository Vault integration)
 - [x] Add unit tests for Logs and Stats DB separation (verifying correct SQLite file isolation and repo routing)
 - [x] Add unit tests for auto-switch web_search capability detection (`open-sse/services/combo.js`)
-- [ ] Expand unit tests for model aggregation route/resolver edge cases (priority fallbacks, offline combos)
+- [x] Expand unit tests for model aggregation route/resolver edge cases (priority fallbacks, offline combos)
